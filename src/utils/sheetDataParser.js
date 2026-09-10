@@ -188,6 +188,7 @@ export function normalizeDate(val) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const BRAND_ALIASES = {
+  tyson: ['tyson', 'tysonfoods', 'tysonfoodsmx', 'tyson foods', 'tyson foods mx'],
   botanera: ['botanera', 'labotanera', 'la botanera'],
   chamoy: ['chamoy', 'chamoymega'],
   pacific: ['pacific', 'pacificmix', 'pacific mix'],
