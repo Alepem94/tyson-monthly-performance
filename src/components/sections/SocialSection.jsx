@@ -37,7 +37,24 @@ function metricStyle(metrica) {
 function capitalize(s) {
   return s ? String(s).charAt(0).toUpperCase() + String(s).slice(1) : '—'
 }
-const normPlat = v => String(v || '').toLowerCase().trim()
+const normText = v => String(v ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/[\s_-]+/g, ' ')
+  .trim()
+const normPlat = v => {
+  const value = normText(v)
+  if (value === 'meta') return 'facebook'
+  if (value === 'google ads' || value === 'googleads') return 'google'
+  if (value === 'tik tok') return 'tiktok'
+  return value
+}
+const normMonth = v => {
+  const value = String(v ?? '').trim()
+  const match = value.match(/(\d{4})[-/]?(\d{1,2})/)
+  return match ? `${match[1]}-${String(match[2]).padStart(2, '0')}` : value.slice(0, 7)
+}
 // Normaliza keys de objetivo/métrica: lowercase, trim, sin acentos
 const normKey = v => String(v || '').toLowerCase().trim()
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -61,7 +78,7 @@ function campanaInversion(campanas, platform, bucket) {
     .filter(c => {
       const cPlat   = getCampaignPlatform(c)
       const cBucket = c._bucket || tipoCampanaToBucket(c.tipo_campana)
-      return cPlat === platform && (bucket === null || cBucket === bucket)
+      return normPlat(cPlat) === normPlat(platform) && (bucket === null || cBucket === bucket)
     })
     .reduce((a, c) => a + safeNumber(c.inversion), 0)
 }
@@ -245,14 +262,14 @@ export function PaidMediaSection({ platform, month, campanas, allCampanas = [], 
 
   // Proyecciones de esta plataforma y mes (marca ya filtrada por el hook)
   const platProy = useMemo(
-    () => (proyecciones || []).filter(p => normPlat(p.plataforma) === platform && p.mes === month),
+    () => (proyecciones || []).filter(p => normPlat(p.plataforma) === normPlat(platform) && normMonth(p.mes) === normMonth(month)),
     [proyecciones, platform, month]
   )
 
   // Previous month proyecciones for variation
   const pm = prevMonth(month)
   const prevPlatProy = useMemo(
-    () => (proyecciones || []).filter(p => normPlat(p.plataforma) === platform && p.mes === pm),
+    () => (proyecciones || []).filter(p => normPlat(p.plataforma) === normPlat(platform) && normMonth(p.mes) === normMonth(pm)),
     [proyecciones, platform, pm]
   )
   const py = month ? `${Number(String(month).slice(0, 4)) - 1}-${String(month).slice(5, 7)}` : null
