@@ -82,13 +82,17 @@ export function normalizeMetricKey(value) {
 }
 
 export function getCampaignPlatform(row) {
+  if (row?.plataforma) {
+    const platform = stripAccents(row.plataforma).replace(/\s+/g, ' ')
+    if (platform === 'google ads' || platform === 'googleads') return 'google'
+    if (platform === 'facebook' || platform === 'meta') return 'facebook'
+    if (platform === 'instagram') return 'instagram'
+    if (platform === 'tiktok' || platform === 'tik tok') return 'tiktok'
+    if (platform === 'google') return 'google'
+    return platform
+  }
   const fullName = row?.nombre_campana || row?._fullName || ''
-  const fromName = detectPlatformFromName(fullName)
-  if (fromName) return fromName
-  if (!row?.plataforma) return null
-  const platform = stripAccents(row.plataforma)
-  if (platform === 'google ads' || platform === 'googleads') return 'google'
-  return platform
+  return detectPlatformFromName(fullName)
 }
 
 // ── Google Ads objective from tipo_objetivo / tipo_red column ──────────────
