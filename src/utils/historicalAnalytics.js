@@ -1,7 +1,15 @@
 import { safeNumber } from './format'
-import { getCampaignPlatform, normalizeMetricKey } from './campaigns'
+import { getCampaignPlatform, normalizeMetricKey, normalizeText } from './campaigns'
 
-const cleanKey = (value) => normalizeMetricKey(value || '').replace(/\s+/g, ' ').trim()
+const cleanKey = (value) => normalizeText(value || '')
+const cleanMonth = (value) => normalizeText(value || '')
+
+const normalizeCampaignRow = (row) => ({
+  ...row,
+  mes: cleanMonth(row?.mes),
+  objetivo: row?.objetivo ? String(row.objetivo).trim() : row?.objetivo,
+  objetivo_detectado: row?.objetivo_detectado ? String(row.objetivo_detectado).trim() : row?.objetivo_detectado,
+})
 
 export const SOCIAL_HISTORY_METRICS = {
   facebook: [
@@ -149,7 +157,10 @@ export function getMetricHighlights(rows = [], key, currentMonth = null) {
 }
 
 export function enrichCampaignRows(campanas = [], platform) {
-  return campanas.filter(c => getCampaignPlatform(c) === platform)
+  const targetPlatform = normalizeText(platform)
+  return campanas
+    .map(normalizeCampaignRow)
+    .filter(c => normalizeText(getCampaignPlatform(c)) === targetPlatform)
 }
 
 export function campaignMetricKey(row) {

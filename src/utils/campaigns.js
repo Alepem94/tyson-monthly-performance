@@ -12,8 +12,16 @@
 // detection only when the explicit column is missing (older sheets).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const stripAccents = (s) =>
-  String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+export const normalizeText = (value) =>
+  String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/[\s_-]+/g, ' ')
+    .trim()
+
+const stripAccents = normalizeText
 
 // ── Bucket detection ────────────────────────────────────────────────────────
 // A "bucket" is the grouping used by the Mensual/Mundial/Pal Norte toggle.
@@ -83,7 +91,7 @@ export function normalizeMetricKey(value) {
 
 export function getCampaignPlatform(row) {
   if (row?.plataforma) {
-    const platform = stripAccents(row.plataforma).replace(/\s+/g, ' ')
+    const platform = normalizeText(row.plataforma)
     if (platform === 'google ads' || platform === 'googleads') return 'google'
     if (platform === 'facebook' || platform === 'meta') return 'facebook'
     if (platform === 'instagram') return 'instagram'
