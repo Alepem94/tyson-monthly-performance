@@ -72,6 +72,17 @@ function normalizeDate(val) {
     return `${slash[3]}-${String(parseInt(slash[1])).padStart(2, '0')}-${String(parseInt(slash[2])).padStart(2, '0')}`
   }
 
+  // DD-MM-YYYY (Latin American format with dashes, e.g. "15-02-2026")
+  const dashDate = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/)
+  if (dashDate) {
+    const d = parseInt(dashDate[1], 10)
+    const m = parseInt(dashDate[2], 10)
+    const y = parseInt(dashDate[3], 10)
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    }
+  }
+
   // ISO string with time
   if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10)
 

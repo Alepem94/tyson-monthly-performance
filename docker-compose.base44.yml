@@ -7,5 +7,6 @@ services:
     ports:
       - "3000:5173"
     command: sh -c "npm install && npx vite --host 0.0.0.0 --port 5173"
-    environment:
-      - VITE_SHEET_ID=${VITE_SHEET_ID:-}
+    env_file:
+      - ./.env.base44-defaults
+      - /run/base44/app.env

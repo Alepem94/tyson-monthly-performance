@@ -231,7 +231,7 @@ export function processRow(row, fieldMapping) {
   ]
   for (const field of numericFields) {
     if (extracted[field] !== undefined) {
-      const n = parseFloat(extracted[field])
+      const n = parseFloat(String(extracted[field]).replace(/,/g, ''))
       extracted[field] = isNaN(n) ? 0 : n
     }
   }
