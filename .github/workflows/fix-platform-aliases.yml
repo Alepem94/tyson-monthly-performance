@@ -1,6 +1,8 @@
 name: Fix platform aliases
 on:
-  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-platform-aliases.yml'
 jobs:
   fix:
     runs-on: ubuntu-latest
