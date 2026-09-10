@@ -364,9 +364,6 @@ export function PaidMediaSection({ platform, month, campanas, allCampanas = [], 
     groups.length > 1 ? `${groups.length} grupos` : '',
   ].filter(Boolean).join(' · ')
 
-  // Nota: este early return va DESPUÉS de todos los hooks (useState/useMemo/useEffect)
-  // para no violar las reglas de hooks (mismo número de hooks en cada render).
-  if (platProy.length === 0 && inversionTotal === 0) return null
 
   return (
     <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${accent}33` }}>
