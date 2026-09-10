@@ -290,8 +290,6 @@ function GoogleAdsProyecciones({ rows, proyecciones = [], selectedMonth }) {
     })
   }, [proyecciones, selectedMonth])
 
-  if (gadsProyecciones.length === 0) return null
-
   // Build real values from actual google ads data (rows) grouped by tipo_red
   const realByType = useMemo(() => {
     const map = {}
@@ -332,6 +330,9 @@ function GoogleAdsProyecciones({ rows, proyecciones = [], selectedMonth }) {
       }
     })
   }, [gadsProyecciones, realByType])
+
+  // Early return DESPUÉS de todos los hooks para no violar las reglas de hooks.
+  if (gadsProyecciones.length === 0) return null
 
   return (
     <ChartCard
