@@ -13,6 +13,7 @@ import { SentimentSection } from '../components/sections/SentimentSection'
 import { CompetenciaSection } from '../components/sections/CompetenciaSection'
 import { HallazgosSection } from '../components/sections/HallazgosSection'
 import { ProyeccionesSection } from '../components/sections/ProyeccionesSection'
+import { CampanasSection } from '../components/sections/CampanasSection'
 import { PlatformHistory } from '../components/sections/Historical'
 import { detectAvailableBuckets } from '../utils/campaigns'
 import { exportDashboardPDF } from '../utils/exportPDF'
@@ -477,6 +478,15 @@ export function Dashboard() {
                   } />
                 </>
               )}
+
+              <Route path="campanas" element={
+                <CampanasSection
+                  proyeccionesCampana={filteredData.proyeccionesCampana || []}
+                  allCampanas={(data && data.campanas) || []}
+                  loading={loading}
+                  theme={theme}
+                />
+              } />
 
               <Route path="proyecciones" element={
                 <ProyeccionesSection
