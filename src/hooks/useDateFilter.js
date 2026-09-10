@@ -72,16 +72,23 @@ export function useDateFilter(data, { mode, selectedMonth, startDate, endDate })
   const filtered = useMemo(() => {
     if (!data) return {}
 
+    const rowMonth = (r) => {
+      const mes = String(r?.mes || '').trim()
+      if (/^\d{4}-\d{2}$/.test(mes)) return mes
+      const fecha = String(r?.fecha || '').trim()
+      if (/^\d{4}-\d{2}-\d{2}/.test(fecha)) return fecha.slice(0, 7)
+      return mes || null
+    }
+
     const inRange = (r) => {
       if (!r.fecha) return false
       return r.fecha >= startDate && r.fecha <= endDate
     }
-    const inMonth = (r) => r.mes === selectedMonth
+    const inMonth = (r) => rowMonth(r) === selectedMonth
 
     const getSingleForMonth = (arr) => {
       if (!Array.isArray(arr) || arr.length === 0) return null
       const hasFecha = arr.some(r => r.fecha)
-
       if (mode === 'month') {
         if (hasFecha) return aggregateRows(arr.filter(inMonth))
         return pickBestMonthRow(arr, inMonth)
@@ -124,36 +131,37 @@ export function useDateFilter(data, { mode, selectedMonth, startDate, endDate })
     const proyMonth = mode === 'month' ? selectedMonth
       : (showProyecciones ? startDate?.slice(0, 7) : null)
 
-    // Proyecciones: se conserva UNA sola colección, como en la arquitectura
-    // original. Las filas Mensual tienen mes; las filas Campaña pueden no tenerlo.
-    // Cada componente decide cómo usar cada tipo y no pierde las filas de campaña.
     const allProy = Array.isArray(data.proyecciones) ? data.proyecciones : []
+
+    // Campañas is actual-data. Keep every source row; Paid Media performs
+    // the aggregation itself so campaign/objective detail is never lost.
+    const campanasForPeriod = Array.isArray(data.campanas)
+      ? (mode === 'month' ? data.campanas.filter(inMonth) : data.campanas.filter(inRange))
+      : []
 
     return {
       empresa: data.empresa,
-      facebook:  getSingleForMonth(data.facebook),
+      facebook: getSingleForMonth(data.facebook),
       instagram: getSingleForMonth(data.instagram),
-      tiktok:    getSingleForMonth(data.tiktok),
+      tiktok: getSingleForMonth(data.tiktok),
       googleAds: getArrayForPeriod(data.googleAds, ['tipo_red']),
       googleAdsCiudades: getArrayForPeriod(data.googleAdsCiudades, ['ciudad']),
       googleAdsKeywords: getArrayForPeriod(data.googleAdsKeywords, ['keyword']),
-      campanas:  getArrayForPeriod(data.campanas, ['nombre_campana', 'plataforma']),
-      topPosts:  getMonthOnly(data.topPosts),
+      campanas: campanasForPeriod,
+      topPosts: getMonthOnly(data.topPosts),
       sentiment: getSingleMonthOnly(data.sentiment),
       sentimentCapturas: mode === 'month'
-        ? (data.sentimentCapturas || []).filter(r => r.mes === selectedMonth) : [],
-      competencia:  getMonthOnly(data.competencia),
-      hallazgos:    getMonthOnly(data.hallazgos),
+        ? (data.sentimentCapturas || []).filter(r => rowMonth(r) === selectedMonth) : [],
+      competencia: getMonthOnly(data.competencia),
+      hallazgos: getMonthOnly(data.hallazgos),
       observaciones: getMonthOnly(data.observaciones),
-      // IMPORTANTE: no separar proyecciones por fecha/tipo aquí.
-      // Paid Media recibe la tabla completa y cruza Mensual/Campaña internamente.
+      // Proyecciones remains one collection because it contains both Mensual
+      // and Campaña rows; each section decides how to use them.
       proyecciones: allProy,
-      // Alias de compatibilidad: mantienen la información disponible sin
-      // convertirlos en la fuente principal de Paid Media.
       proyeccionesMensuales: showProyecciones
         ? allProy.filter(r => {
             const tipo = String(r.tipo_proyeccion || 'Mensual').trim().toLowerCase()
-            return tipo === 'mensual' && r.mes === proyMonth
+            return tipo === 'mensual' && rowMonth(r) === proyMonth
           })
         : [],
       proyeccionesCampana: allProy.filter(r => String(r.tipo_proyeccion || '').trim().toLowerCase() === 'campaña'),
@@ -170,7 +178,7 @@ export function useDateFilter(data, { mode, selectedMonth, startDate, endDate })
       if (!Array.isArray(arr)) return []
       const byMonth = {}
       for (const r of arr) {
-        const m = r.mes
+        const m = rowMonthValue(r)
         if (!m) continue
         if (!byMonth[m]) byMonth[m] = []
         byMonth[m].push(r)
@@ -183,13 +191,21 @@ export function useDateFilter(data, { mode, selectedMonth, startDate, endDate })
     }
 
     return {
-      facebook:   aggregateByMonth(data.facebook  || []),
-      instagram:  aggregateByMonth(data.instagram || []),
-      tiktok:     aggregateByMonth(data.tiktok    || []),
-      googleAds:  data.googleAds   || [],
+      facebook: aggregateByMonth(data.facebook || []),
+      instagram: aggregateByMonth(data.instagram || []),
+      tiktok: aggregateByMonth(data.tiktok || []),
+      googleAds: data.googleAds || [],
       competencia: data.competencia || [],
     }
   }, [data])
 
   return { filtered, historicalData }
+}
+
+function rowMonthValue(r) {
+  const mes = String(r?.mes || '').trim()
+  if (/^\d{4}-\d{2}$/.test(mes)) return mes
+  const fecha = String(r?.fecha || '').trim()
+  if (/^\d{4}-\d{2}-\d{2}/.test(fecha)) return fecha.slice(0, 7)
+  return mes || null
 }
