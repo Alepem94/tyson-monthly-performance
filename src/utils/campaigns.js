@@ -15,6 +15,17 @@
 const stripAccents = (s) =>
   String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
 
+// Canonical platform keys used by dashboard routes. Source sheets may use FB/IG/TT.
+export function normalizeCampaignPlatform(value) {
+  const s = stripAccents(value)
+  if (!s) return null
+  if (s === 'fb' || s === 'facebook' || s === 'meta' || s === 'meta ads') return 'facebook'
+  if (s === 'ig' || s === 'instagram') return 'instagram'
+  if (s === 'tt' || s === 'tiktok' || s === 'tik tok') return 'tiktok'
+  if (s === 'google' || s === 'google ads' || s === 'googleads') return 'google'
+  return s
+}
+
 // ── Bucket detection ────────────────────────────────────────────────────────
 // A "bucket" is the grouping used by the Mensual/Mundial/Pal Norte toggle.
 // Maps tipo_campana → bucket key:
@@ -67,14 +78,8 @@ export function detectPlatformFromName(name, fallbackPlatform) {
   if (/\big\b|instagram/.test(s)) return 'instagram'
   if (/\btiktok\b|\btt\b|tik\s*tok/.test(s)) return 'tiktok'
   if (/\bgoogle\b|google\s*ads|video\s*ads|display\s*ads/.test(s)) return 'google'
-  if (fallbackPlatform) {
-    const fb = stripAccents(fallbackPlatform)
-    if (fb === 'facebook') return 'facebook'
-    if (fb === 'instagram') return 'instagram'
-    if (fb === 'tiktok') return 'tiktok'
-    if (fb === 'google') return 'google'
-  }
-  return fallbackPlatform || null
+  if (fallbackPlatform) return normalizeCampaignPlatform(fallbackPlatform)
+  return null
 }
 
 export function normalizeMetricKey(value) {
@@ -85,7 +90,7 @@ export function getCampaignPlatform(row) {
   const fullName = row?.nombre_campana || row?._fullName || ''
   const fromName = detectPlatformFromName(fullName)
   if (fromName) return fromName
-  return row?.plataforma ? stripAccents(row.plataforma) : null
+  return normalizeCampaignPlatform(row?.plataforma)
 }
 
 // ── Google Ads objective from tipo_objetivo / tipo_red column ──────────────

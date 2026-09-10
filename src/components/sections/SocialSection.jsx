@@ -11,7 +11,7 @@ import { PlatformSubnav } from '../ui/PlatformSubnav'
 import { CampaignToggle } from '../ui/CampaignToggle'
 import { safeNumber, formatNumber, formatCurrency, formatDecimal, truncTo, prevMonth, pctChange } from '../../utils/format'
 import { useNavigate, useParams } from 'react-router-dom'
-import { buildCampaignPerformance, getCampaignPlatform, tipoCampanaToBucket, bucketToLabel } from '../../utils/campaigns'
+import { buildCampaignPerformance, getCampaignPlatform, normalizeCampaignPlatform, tipoCampanaToBucket, bucketToLabel } from '../../utils/campaigns'
 
 const PLATFORM_CONFIG = {
   facebook:  { icon: Facebook,  accent: '#3b82f6', label: 'Facebook' },
@@ -37,7 +37,7 @@ function metricStyle(metrica) {
 function capitalize(s) {
   return s ? String(s).charAt(0).toUpperCase() + String(s).slice(1) : '—'
 }
-const normPlat = v => String(v || '').toLowerCase().trim()
+const normPlat = v => normalizeCampaignPlatform(v) || String(v || '').toLowerCase().trim()
 // Normaliza keys de objetivo/métrica: lowercase, trim, sin acentos
 const normKey = v => String(v || '').toLowerCase().trim()
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -230,8 +230,8 @@ function ObjectiveResultCard({ card, accent, delay = 0 }) {
 
 export function PaidMediaSection({ platform, month, campanas, allCampanas = [], proyecciones, accent, hallazgos = [], observaciones = [] }) {
   // Defensive normalization: the section must render even if a Sheet returns an unexpected shape.
-  const safeCampanas = Array.isArray(campanas) ? campanas : []
-  const safeAllCampanas = Array.isArray(allCampanas) ? allCampanas : []
+  const safeCampanas = (Array.isArray(campanas) ? campanas : []).map(r => ({ ...r, plataforma: normalizeCampaignPlatform(r.plataforma) || r.plataforma }))
+  const safeAllCampanas = (Array.isArray(allCampanas) ? allCampanas : []).map(r => ({ ...r, plataforma: normalizeCampaignPlatform(r.plataforma) || r.plataforma }))
   const safeProyecciones = Array.isArray(proyecciones) ? proyecciones : []
   const [bucket, setBucket] = useState('mensual')
   const [breakdownOpen, setBreakdownOpen] = useState(false)
