@@ -203,6 +203,23 @@ function normalizeBrand(val) {
   return s  // Fallback to original
 }
 
+export function parseSheetNumber(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0
+  if (value === null || value === undefined || value === '') return 0
+  let text = String(value).trim().replace(/[^0-9,.-]/g, '')
+  if (!text) return 0
+  const comma = text.lastIndexOf(',')
+  const dot = text.lastIndexOf('.')
+  if (comma > -1 && dot > -1) {
+    text = comma > dot ? text.replace(/\\./g, '').replace(',', '.') : text.replace(/,/g, '')
+  } else if (comma > -1) {
+    const decimals = text.length - comma - 1
+    text = decimals === 3 ? text.replace(/,/g, '') : text.replace(',', '.')
+  }
+  const parsed = Number(text)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ROW PROCESSOR — Normaliza una fila completa
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -232,8 +249,7 @@ export function processRow(row, fieldMapping) {
   ]
   for (const field of numericFields) {
     if (extracted[field] !== undefined) {
-      const n = parseFloat(extracted[field])
-      extracted[field] = isNaN(n) ? 0 : n
+      extracted[field] = parseSheetNumber(extracted[field])
     }
   }
   

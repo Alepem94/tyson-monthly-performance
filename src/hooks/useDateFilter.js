@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { safeNumber } from '../utils/format'
 
 const SUM_FIELDS = [
-  'alcance', 'impresiones', 'impresiones_visibles', 'interacciones', 'inversion',
+  'alcance', 'impresiones', 'impresiones_visibles', 'interacciones', 'inversion', 'presupuesto', 'proyeccion',
   'views', 'views_6s', 'nuevos_seguidores', 'publicaciones',
   'clics', 'conversiones', 'visualizaciones', 'resultado',
 ]
