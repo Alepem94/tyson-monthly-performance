@@ -1,9 +1,10 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Flag, Target, DollarSign, TrendingUp, Facebook, Instagram, Music2, Megaphone } from 'lucide-react'
+import { Flag, Target, DollarSign, TrendingUp, Facebook, Instagram, Music2, Megaphone, ChevronDown, ChevronRight } from 'lucide-react'
 import { SectionHeader, EmptyState } from '../ui/SectionHeader'
 import { KPICard } from '../ui/KPICard'
 import { safeNumber, formatNumber, formatCurrency, formatDecimal, truncTo } from '../../utils/format'
+import { tipoCampanaToBucket } from '../../utils/campaigns'
 import { buildSpecificCampaigns } from '../../utils/timeline'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -33,52 +34,36 @@ const PLATFORM_META = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Build campaign results: merge Proyecciones (metas) with Campañas (resultados)
+// Build campaign results — matching por bucket (tipo_campana), no por nombre
 // ─────────────────────────────────────────────────────────────────────────────
 function buildCampaignResults(proyeccionesCampana = [], allCampanas = []) {
-  // 1. Get atemporal campaigns from Campañas sheet (excludes AON/mensual)
   const specificCampaigns = buildSpecificCampaigns(allCampanas)
 
-  // 2. Build projection lookup by normalized campaign name
-  const projByName = new Map()
+  // Build projection lookup by bucket (tipo_campana → bucket)
+  const projByBucket = new Map()
   for (const proj of proyeccionesCampana) {
-    const name = proj.nombre_campana || proj.tipo_campana || ''
-    const key = normalizeName(name)
-    if (!key) continue
-    if (!projByName.has(key)) {
-      projByName.set(key, {
-        name,
-        tipo: proj.tipo_campana || null,
+    const tipoCampana = proj.tipo_campana || proj.nombre_campana || ''
+    const bucket = tipoCampanaToBucket(tipoCampana)
+    if (!bucket) continue
+    if (!projByBucket.has(bucket)) {
+      projByBucket.set(bucket, {
+        name: tipoCampana,
+        tipo: tipoCampana,
         fechaInicio: proj.fecha_inicio || null,
         fechaFin: proj.fecha_fin || null,
         projections: [],
       })
     }
-    projByName.get(key).projections.push(proj)
+    projByBucket.get(bucket).projections.push(proj)
   }
 
-  const matchedProjKeys = new Set()
+  const matchedBuckets = new Set()
 
-  // 3. Enrich specific campaigns with matching projections
+  // Enrich specific campaigns with matching projections (by bucket)
   const results = specificCampaigns.map(camp => {
-    const normName = normalizeName(camp.nombre)
-    let proj = null
+    const proj = projByBucket.get(camp.bucket)
+    if (proj) matchedBuckets.add(camp.bucket)
 
-    if (projByName.has(normName)) {
-      proj = projByName.get(normName)
-      matchedProjKeys.add(normName)
-    } else {
-      // Fuzzy: one name starts with the other
-      for (const [key, p] of projByName) {
-        if (normName.startsWith(key) || key.startsWith(normName)) {
-          proj = p
-          matchedProjKeys.add(key)
-          break
-        }
-      }
-    }
-
-    // Build objectives from actual campaign results + matched projections
     const objectives = camp.objetivos.map(obj => {
       const objKey = normalizeName(obj.objetivo)
       const matchingProj = (proj?.projections || []).find(p => {
@@ -99,6 +84,7 @@ function buildCampaignResults(proyeccionesCampana = [], allCampanas = []) {
         objetivo: obj.objetivo,
         plataforma: obj.platform || '—',
         presupuesto, meta, resultado, inversion, cumplimiento, cpr,
+        detalles: obj.detalles || [],
       }
     })
 
@@ -113,6 +99,7 @@ function buildCampaignResults(proyeccionesCampana = [], allCampanas = []) {
           presupuesto: safeNumber(p.presupuesto),
           meta: safeNumber(p.proyeccion),
           resultado: 0, inversion: 0, cumplimiento: null, cpr: null,
+          detalles: [],
         })
       }
     }
@@ -124,37 +111,42 @@ function buildCampaignResults(proyeccionesCampana = [], allCampanas = []) {
     const overallCumplimiento = totalMeta > 0 ? (totalResultado / totalMeta) * 100 : null
 
     return {
-      name: camp.nombre,
+      name: camp.label,
+      bucket: camp.bucket,
       tipo: camp.label,
       fechaInicio: camp.fechaInicio || proj?.fechaInicio || null,
       fechaFin: camp.fechaFin || proj?.fechaFin || null,
       dateLabel: camp.dateLabel,
       platforms: camp.platforms,
+      nombres: camp.nombres,
       objectives,
       totalMeta, totalResultado, totalPresupuesto, totalInversion,
       overallCumplimiento,
     }
   })
 
-  // 4. Add projection-only campaigns (planned but no results yet)
-  for (const [key, proj] of projByName) {
-    if (matchedProjKeys.has(key)) continue
+  // Add projection-only campaigns (planned but no results yet)
+  for (const [bucket, proj] of projByBucket) {
+    if (matchedBuckets.has(bucket)) continue
     const objectives = proj.projections.map(p => ({
       objetivo: p.objetivo || p.metrica || '—',
       plataforma: p.plataforma || '—',
       presupuesto: safeNumber(p.presupuesto),
       meta: safeNumber(p.proyeccion),
       resultado: 0, inversion: 0, cumplimiento: null, cpr: null,
+      detalles: [],
     }))
     const totalMeta = objectives.reduce((s, o) => s + o.meta, 0)
     const totalPresupuesto = objectives.reduce((s, o) => s + o.presupuesto, 0)
     results.push({
       name: proj.name,
-      tipo: proj.tipo || 'Campaña',
+      bucket,
+      tipo: proj.name,
       fechaInicio: proj.fechaInicio,
       fechaFin: proj.fechaFin,
       dateLabel: null,
       platforms: [...new Set(proj.projections.map(p => p.plataforma).filter(Boolean))],
+      nombres: [],
       objectives,
       totalMeta, totalResultado: 0, totalPresupuesto, totalInversion: 0,
       overallCumplimiento: null,
@@ -165,8 +157,66 @@ function buildCampaignResults(proyeccionesCampana = [], allCampanas = []) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CampaignCard — one card per atemporal campaign
+// CampaignCard — una tarjeta por tipo de campaña, con desglose expandible
 // ─────────────────────────────────────────────────────────────────────────────
+function ObjectiveRow({ obj, theme }) {
+  const [expanded, setExpanded] = useState(false)
+  const hasDetalles = obj.detalles && obj.detalles.length > 0
+  const objColor = getComplianceColor(obj.cumplimiento)
+
+  return (
+    <>
+      <tr className="border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
+        <td className="px-4 py-2.5 text-white/85 font-semibold capitalize">
+          {hasDetalles && (
+            <button onClick={() => setExpanded(e => !e)} className="inline-flex items-center mr-1.5 text-white/40 hover:text-white">
+              {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+            </button>
+          )}
+          {obj.objetivo}
+        </td>
+        <td className="px-4 py-2.5 text-white/55 text-xs capitalize">{obj.plataforma}</td>
+        <td className="px-4 py-2.5 text-right text-white/85 font-mono">
+          {obj.presupuesto > 0 ? formatCurrency(obj.presupuesto) : <span className="text-white/30">—</span>}
+        </td>
+        <td className="px-4 py-2.5 text-right text-white/85 font-mono">
+          {obj.meta > 0 ? formatNumber(obj.meta) : <span className="text-white/30">—</span>}
+        </td>
+        <td className="px-4 py-2.5 text-right text-white font-mono font-bold">
+          {obj.resultado > 0 ? formatNumber(obj.resultado) : <span className="text-white/30">—</span>}
+        </td>
+        <td className="px-4 py-2.5 text-right font-mono">
+          {obj.cumplimiento !== null ? (
+            <span style={{ color: objColor }} className="font-bold">{truncTo(obj.cumplimiento, 0)}%</span>
+          ) : <span className="text-white/30">—</span>}
+        </td>
+        <td className="px-4 py-2.5 text-right text-white/85 font-mono">
+          {obj.inversion > 0 ? formatCurrency(obj.inversion) : <span className="text-white/30">—</span>}
+        </td>
+        <td className="px-4 py-2.5 text-right text-amber-200 font-mono">
+          {obj.cpr !== null ? `$${formatDecimal(obj.cpr, 2)}` : <span className="text-white/30">—</span>}
+        </td>
+      </tr>
+      {expanded && hasDetalles && (
+        <tr className="bg-white/[0.02]">
+          <td colSpan={8} className="px-4 py-2">
+            <div className="space-y-1">
+              <p className="text-[10px] uppercase tracking-widest text-white/35 font-semibold mb-1">Desglose por campaña</p>
+              {obj.detalles.map((d, i) => (
+                <div key={i} className="flex items-center justify-between text-[11px] text-white/55">
+                  <span className="truncate flex-1 mr-3" title={d.nombre}>{d.nombre}</span>
+                  <span className="text-white/70 font-mono">{formatNumber(d.resultado)} res.</span>
+                  <span className="text-white/50 font-mono ml-3">{formatCurrency(d.inversion)}</span>
+                </div>
+              ))}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  )
+}
+
 function CampaignCard({ campaign, theme, index }) {
   const color = getComplianceColor(campaign.overallCumplimiento)
 
@@ -190,18 +240,23 @@ function CampaignCard({ campaign, theme, index }) {
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-sm font-bold text-white truncate">{campaign.name}</h3>
-              {campaign.tipo && (
-                <span
-                  className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full flex-shrink-0"
-                  style={{ background: `${theme.primary}25`, color: theme.primary }}
-                >
-                  {campaign.tipo}
+              {campaign.nombres.length > 0 && (
+                <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full flex-shrink-0 bg-white/10 text-white/50">
+                  {campaign.nombres.length} campañas
                 </span>
               )}
             </div>
-            {campaign.dateLabel && (
-              <p className="text-[11px] text-white/45 mt-0.5">{campaign.dateLabel}</p>
-            )}
+            <div className="flex items-center gap-2 mt-0.5">
+              {campaign.dateLabel && (
+                <p className="text-[11px] text-white/45">{campaign.dateLabel}</p>
+              )}
+              {campaign.dateLabel && campaign.nombres.length > 0 && <span className="text-white/20">·</span>}
+              {campaign.nombres.length > 0 && (
+                <p className="text-[10px] text-white/35 truncate max-w-[280px]">
+                  {campaign.nombres.slice(0, 2).join(', ')}{campaign.nombres.length > 2 ? '...' : ''}
+                </p>
+              )}
+            </div>
           </div>
         </div>
 
@@ -254,35 +309,9 @@ function CampaignCard({ campaign, theme, index }) {
             </tr>
           </thead>
           <tbody>
-            {campaign.objectives.map((obj, i) => {
-              const objColor = getComplianceColor(obj.cumplimiento)
-              return (
-                <tr key={i} className="border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-2.5 text-white/85 font-semibold capitalize">{obj.objetivo}</td>
-                  <td className="px-4 py-2.5 text-white/55 text-xs capitalize">{obj.plataforma}</td>
-                  <td className="px-4 py-2.5 text-right text-white/85 font-mono">
-                    {obj.presupuesto > 0 ? formatCurrency(obj.presupuesto) : <span className="text-white/30">—</span>}
-                  </td>
-                  <td className="px-4 py-2.5 text-right text-white/85 font-mono">
-                    {obj.meta > 0 ? formatNumber(obj.meta) : <span className="text-white/30">—</span>}
-                  </td>
-                  <td className="px-4 py-2.5 text-right text-white font-mono font-bold">
-                    {obj.resultado > 0 ? formatNumber(obj.resultado) : <span className="text-white/30">—</span>}
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono">
-                    {obj.cumplimiento !== null ? (
-                      <span style={{ color: objColor }} className="font-bold">{truncTo(obj.cumplimiento, 0)}%</span>
-                    ) : <span className="text-white/30">—</span>}
-                  </td>
-                  <td className="px-4 py-2.5 text-right text-white/85 font-mono">
-                    {obj.inversion > 0 ? formatCurrency(obj.inversion) : <span className="text-white/30">—</span>}
-                  </td>
-                  <td className="px-4 py-2.5 text-right text-amber-200 font-mono">
-                    {obj.cpr !== null ? `$${formatDecimal(obj.cpr, 2)}` : <span className="text-white/30">—</span>}
-                  </td>
-                </tr>
-              )
-            })}
+            {campaign.objectives.map((obj, i) => (
+              <ObjectiveRow key={i} obj={obj} theme={theme} />
+            ))}
           </tbody>
           {campaign.objectives.length > 1 && (
             <tfoot>
@@ -378,7 +407,7 @@ export function CampanasSection({
           {/* Summary KPIs */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <KPICard
-              title="Campañas Activas"
+              title="Tipos de Campaña"
               value={campaigns.length}
               icon={Flag}
               accentColor={theme.primary}
@@ -413,7 +442,7 @@ export function CampanasSection({
           {/* Campaign cards */}
           <div className="space-y-4">
             {campaigns.map((c, i) => (
-              <CampaignCard key={c.name + i} campaign={c} theme={theme} index={i} />
+              <CampaignCard key={c.bucket + i} campaign={c} theme={theme} index={i} />
             ))}
           </div>
         </>

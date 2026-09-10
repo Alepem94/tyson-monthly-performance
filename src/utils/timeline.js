@@ -65,13 +65,14 @@ export function buildSpecificCampaigns(campanas = []) {
 
     const fechaInicio = row.fecha_inicio || null
     const fechaFin = row.fecha_fin || null
-    const nombre = row.nombre_campana || row._fullName || bucketToLabel(bucket, tipoCampana)
+    const nombreDetalle = row.nombre_campana || row._fullName || ''
 
-    const key = [nombre, bucket, fechaInicio || '', fechaFin || ''].join('|')
+    // Agrupar por tipo_campana (bucket), no por nombre_campana
+    const key = [bucket, fechaInicio || '', fechaFin || ''].join('|')
     if (!groups.has(key)) {
       groups.set(key, {
         key,
-        nombre,
+        nombre: bucketToLabel(bucket, tipoCampana),
         bucket,
         label: bucketToLabel(bucket, tipoCampana),
         fechaInicio,
@@ -79,11 +80,13 @@ export function buildSpecificCampaigns(campanas = []) {
         platforms: new Set(),
         inversion: 0,
         resultado: 0,
-        objetivos: new Map(), // objetivo → { platform, resultado, inversion }
+        objetivos: new Map(),
         months: new Set(),
+        nombres: new Set(), // nombres detallados (nivel más granular)
       })
     }
     const g = groups.get(key)
+    if (nombreDetalle) g.nombres.add(nombreDetalle)
     const platform = getCampaignPlatform(row)
     if (platform) g.platforms.add(platform)
     if (row.mes) g.months.add(row.mes)
@@ -91,11 +94,14 @@ export function buildSpecificCampaigns(campanas = []) {
     const objetivo = row._objective || row.objetivo_detectado || row.objetivo || 'Sin objetivo'
     const objKey = `${platform || '—'}::${objetivo}`
     if (!g.objetivos.has(objKey)) {
-      g.objetivos.set(objKey, { platform, objetivo, resultado: 0, inversion: 0 })
+      g.objetivos.set(objKey, { platform, objetivo, resultado: 0, inversion: 0, detalles: [] })
     }
     const o = g.objetivos.get(objKey)
     o.resultado += safeNumber(row.resultado)
     o.inversion += safeNumber(row.inversion)
+    if (nombreDetalle) {
+      o.detalles.push({ nombre: nombreDetalle, resultado: safeNumber(row.resultado), inversion: safeNumber(row.inversion) })
+    }
 
     g.inversion += safeNumber(row.inversion)
     g.resultado += safeNumber(row.resultado)
@@ -120,6 +126,7 @@ export function buildSpecificCampaigns(campanas = []) {
       objetivos: Array.from(g.objetivos.values()),
       months: months.sort(),
       startMonth: months.length > 0 ? months.sort()[0] : null,
+      nombres: Array.from(g.nombres),
     }
   })
 }

@@ -44,7 +44,13 @@ export function bucketToLabel(bucket, tipoCampana) {
   if (bucket === 'mensual') return 'Mensual / AON'
   if (bucket === 'mundial') return 'Mundial'
   if (bucket === 'pal_norte') return 'Pal Norte'
-  // For custom buckets, use the original tipo_campana text if available
+  if (bucket === 'spooky_nuggets') return 'Spooky Nuggets'
+  if (bucket === 'nuggets') return 'Nuggets'
+  if (bucket === 'hard_sell') return 'Hard Sell'
+  if (bucket === 'nfl') return 'NFL'
+  if (bucket === 'norte_y_centro') return 'Norte y Centro'
+  if (bucket === 'pacifico_y_bajio') return 'Pacifico y Bajío'
+  // For unknown custom buckets, use the original tipo_campana text if available
   return tipoCampana || bucket
 }
 
