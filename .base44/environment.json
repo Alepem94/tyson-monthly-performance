@@ -1,0 +1,13 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {
+      "name": "VITE_SHEET_ID",
+      "description": "Google Sheet ID — the ID of the published Google Sheet that the dashboard reads its data from (found in the Sheet URL between /d/ and /edit).",
+      "requiredAtBoot": false,
+      "generatedForDevelopment": false
+    }
+  ]
+}
