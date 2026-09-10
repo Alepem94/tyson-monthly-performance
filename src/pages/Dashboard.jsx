@@ -51,6 +51,7 @@ export function Dashboard() {
   const {
     data, loading, error, refresh, isRefreshing,
     availableMonths, dateRange, isDailyData, brandConfig, features,
+    partialErrors,
   } = useSheetData(marcaId)
 
   const baseTheme = brandThemes[marcaId] || defaultTheme
@@ -229,6 +230,21 @@ export function Dashboard() {
             exportStatus={exportStatus}
             canExport={canExport}
           />
+
+          {/* Partial load warning: some sheets failed after retries, so the
+              sections that depend on them may show incomplete/empty data. */}
+          {partialErrors && partialErrors.length > 0 && (
+            <div className="px-4 md:px-6 pb-2">
+              <div className="rounded-lg bg-amber-500/10 border border-amber-400/30 text-amber-200 text-xs px-3 py-2">
+                <span className="font-semibold">Algunas pestañas del Sheet no cargaron:</span>{' '}
+                {partialErrors.map(e => e.sheet).join(', ')}.{' '}
+                Las secciones correspondientes pueden verse vacías o incompletas.{' '}
+                <button onClick={refresh} className="underline hover:text-amber-100">
+                  Reintentar carga
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Range mode indicator */}
           {filterMode === 'range' && (
