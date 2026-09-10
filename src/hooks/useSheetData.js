@@ -143,8 +143,14 @@ const BRAND_MAP = {
 }
 function normalizeBrand(val) {
   if (val === null || val === undefined) return val
-  const key = String(val).trim().toLowerCase()
-  return BRAND_MAP[key] ?? key
+  const key = String(val)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[\s_-]+/g, ' ')
+    .trim()
+  const compact = key.replace(/\s/g, '')
+  return BRAND_MAP[key] ?? BRAND_MAP[compact] ?? (compact.startsWith('tysonfood') ? 'tyson' : key)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -300,7 +306,7 @@ export function useSheetData(marcaId) {
         fetchSheet('GoogleAds').catch(() => []),
         fetchSheet('GoogleAds_Ciudades').catch(() => []),
         fetchSheet('GoogleAds_Keywords').catch(() => []),
-        fetchSheet('Campañas').catch(() => fetchSheet('Campanas').catch(() => [])),
+        fetchSheet('Campañas').catch(() => fetchSheet('Campanas').catch(() => fetchSheet('Campaña').catch(() => []))),
         fetchSheet('TopPosts'),
         fetchSheet('Sentiment'),
         fetchSheet('Sentiment_Capturas').catch(() => []),
