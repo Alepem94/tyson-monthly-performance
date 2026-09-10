@@ -15,14 +15,15 @@
 const stripAccents = (s) =>
   String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
 
-// Canonical platform keys used by dashboard routes. Source sheets may use FB/IG/TT.
+// Canonical platform keys used by dashboard routes. Source sheets may use
+// FB/IG/TT, full names, or labels such as "Facebook Ads".
 export function normalizeCampaignPlatform(value) {
   const s = stripAccents(value)
   if (!s) return null
-  if (s === 'fb' || s === 'facebook' || s === 'meta' || s === 'meta ads') return 'facebook'
-  if (s === 'ig' || s === 'instagram') return 'instagram'
-  if (s === 'tt' || s === 'tiktok' || s === 'tik tok') return 'tiktok'
-  if (s === 'google' || s === 'google ads' || s === 'googleads') return 'google'
+  if (/^(fb|facebook|meta|meta ads|fb ads|facebook ads)$/.test(s) || s.startsWith('facebook ') || s.startsWith('fb ')) return 'facebook'
+  if (/^(ig|instagram|ig ads|instagram ads)$/.test(s) || s.startsWith('instagram ') || s.startsWith('ig ')) return 'instagram'
+  if (/^(tt|tiktok|tik tok|tt ads|tiktok ads)$/.test(s) || s.startsWith('tiktok ') || s.startsWith('tik tok ') || s.startsWith('tt ')) return 'tiktok'
+  if (/^(google|google ads|googleads)$/.test(s) || s.startsWith('google ')) return 'google'
   return s
 }
 
@@ -37,7 +38,6 @@ export function tipoCampanaToBucket(tipoCampana) {
   if (!tipoCampana) return 'mensual'
   const s = stripAccents(tipoCampana)
   if (s === 'aon' || s === 'mensual') return 'mensual'
-  // Substring matches for campaign variations (Mundialmente Rico -> mundial, Spooky Nuggets - CDMX -> spooky_nuggets)
   if (s.includes('mundial')) return 'mundial'
   if (s.includes('spooky')) return 'spooky_nuggets'
   if (s.includes('nuggets')) return 'nuggets'
@@ -46,20 +46,16 @@ export function tipoCampanaToBucket(tipoCampana) {
   if (s.replace(/\s+/g, '') === 'palnorte' || s.includes('pal norte')) return 'pal_norte'
   if (s === 'norte' || s === 'norte y centro') return 'norte_y_centro'
   if (s === 'pacifico y bajio' || s === 'pacifico y el bajio') return 'pacifico_y_bajio'
-  // Any other value → slug
   return s.replace(/\s+/g, '_')
 }
 
-// Human-friendly label for a bucket
 export function bucketToLabel(bucket, tipoCampana) {
   if (bucket === 'mensual') return 'Mensual / AON'
   if (bucket === 'mundial') return 'Mundial'
   if (bucket === 'pal_norte') return 'Pal Norte'
-  // For custom buckets, use the original tipo_campana text if available
   return tipoCampana || bucket
 }
 
-// ── Fallback: detect tipo_campana from nombre_campana if column is empty ───
 export function detectTipoCampanaFromName(name) {
   const s = stripAccents(name)
   if (/mundial/.test(s)) return 'Mundial'
@@ -71,7 +67,6 @@ export function detectTipoCampanaFromName(name) {
   return 'AON'
 }
 
-// ── Detect platform from name (fallback) ────────────────────────────────────
 export function detectPlatformFromName(name, fallbackPlatform) {
   const s = stripAccents(name)
   if (/\bfb\b|facebook/.test(s)) return 'facebook'
@@ -93,7 +88,6 @@ export function getCampaignPlatform(row) {
   return normalizeCampaignPlatform(row?.plataforma)
 }
 
-// ── Google Ads objective from tipo_objetivo / tipo_red column ──────────────
 export function getGoogleObjective(tipoValue) {
   const s = stripAccents(tipoValue)
   if (/video|youtube|yt/.test(s)) return 'Video'
@@ -102,7 +96,6 @@ export function getGoogleObjective(tipoValue) {
   return String(tipoValue).charAt(0).toUpperCase() + String(tipoValue).slice(1).toLowerCase()
 }
 
-// ── Detect objective from name (fallback) ───────────────────────────────────
 export function extractObjective(name, platform) {
   const s = stripAccents(name)
   if (/visit[ae]s?\s*(?:al\s*)?perfil|perfil\s*visit/.test(s)) return 'Visitas al perfil'
@@ -121,24 +114,15 @@ export function extractObjective(name, platform) {
   return null
 }
 
-// ── Enrich campaign row ─────────────────────────────────────────────────────
-// Reads explicit columns first, falls back to name detection only if missing.
 export function enrichCampaign(row) {
   const fullName = row.nombre_campana || row.objetivo || ''
-
-  // Use explicit tipo_campana if present, else derive from name
   const tipoCampana = row.tipo_campana || detectTipoCampanaFromName(fullName)
   const bucket = tipoCampanaToBucket(tipoCampana)
-
-  // Campaign names are the safest source when explicit platform values drift.
   const platform = getCampaignPlatform({ ...row, _fullName: fullName })
-
-  // Use explicit objetivo_detectado if present, else detect from name
   const objective = row.objetivo_detectado
     || row.objetivo
     || extractObjective(fullName, platform)
     || 'Sin objetivo'
-
   return {
     ...row,
     _bucket: bucket,
@@ -149,7 +133,6 @@ export function enrichCampaign(row) {
   }
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
 export function filterCampaignsByBucket(campaigns, bucket) {
   if (!Array.isArray(campaigns)) return []
   return campaigns.filter(c => {
@@ -163,11 +146,9 @@ export function buildCampaignPerformance(campaigns = [], platform, bucket = null
     const rowPlatform = getCampaignPlatform(row)
     const rowBucket = row._bucket || tipoCampanaToBucket(row.tipo_campana)
     if (rowPlatform !== platform || (bucket !== null && rowBucket !== bucket)) return acc
-
     const objective = row._objective || row.objetivo_detectado || row.objetivo || ''
     const key = normalizeMetricKey(objective)
     if (!key) return acc
-
     if (!acc[key]) {
       acc[key] = {
         key,
@@ -201,10 +182,8 @@ export function aggregateCampaignMetrics(campaigns) {
   }
 }
 
-// Returns buckets present in the data plus labels for the toggle.
-// Always includes 'mensual' first, then extras in order of appearance.
 export function detectAvailableBuckets(campaigns) {
-  const seen = new Map()  // bucket → label
+  const seen = new Map()
   seen.set('mensual', 'Mensual / AON')
   for (const c of (campaigns || [])) {
     const tipo = c.tipo_campana || c._tipoCampana || detectTipoCampanaFromName(c.nombre_campana || c.objetivo)
