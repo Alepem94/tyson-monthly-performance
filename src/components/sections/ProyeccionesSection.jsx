@@ -328,14 +328,14 @@ function PlatformCard({ platform, allRows, selectedMonth, syncedObjective, onObj
 
 // ── Campaign projections (no prorating, total per campaign) ──
 function CampaignCard({ campaignKey, rows, allCampanas, googleAdsData }) {
-  // rows: all proyeccion rows for this campaign (same nombre_campana or tipo_campana bucket)
+  if (!rows || rows.length === 0) return null
   const first = rows[0] || {}
   const fechas = first.fecha_inicio || first.fecha_fin ? `${first.fecha_inicio || '—'} → ${first.fecha_fin || '—'}` : null
-  const tipoCampana = first.tipo_campana || '—'
+  const tipoCampana = first.tipo_campana || first.nombre_campana || '—'
   // Group rows by plataforma for display
   const byPlatform = useMemo(() => {
     const map = {}
-    for (const r of rows) {
+    for (const r of (rows || [])) {
       const p = normPlat(r.plataforma) || 'total'
       if (!map[p]) map[p] = []
       map[p].push(r)

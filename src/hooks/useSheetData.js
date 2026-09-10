@@ -29,6 +29,16 @@ async function fetchSheet(sheetName) {
 
 function smartNormalize(rawRows) {
   if (!rawRows || rawRows.length === 0) return []
+  // Detect malformed CSV where headers are concatenated (e.g. Campañas sheet with broken export)
+  const headers = rawRows[0] ? Object.keys(rawRows[0]) : []
+  if (headers.length === 1 && headers[0].length > 100) {
+    console.warn('Malformed sheet detected, returning empty', headers[0].slice(0,80))
+    return []
+  }
+  if (headers.length > 0 && headers[0].includes('marca tyson')) {
+    console.warn('Malformed Campañas sheet, returning empty')
+    return []
+  }
   const { rows: parsed } = processSheet(rawRows)
   return rawRows.map((original, i) => ({
     ...original,
