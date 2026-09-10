@@ -2,11 +2,13 @@ import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Calendar, Facebook, Instagram, Music2, Megaphone, Users, Eye, Heart,
-  ChevronDown, ChevronRight, Zap, ArrowUpRight,
+  ChevronDown, ChevronRight, Zap, ArrowUpRight, DollarSign, TrendingUp, Flag,
 } from 'lucide-react'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { SectionHeader, EmptyState } from '../ui/SectionHeader'
-import { safeNumber, formatNumber, formatCurrency, formatMonthLong } from '../../utils/format'
-import { buildTimeline } from '../../utils/timeline'
+import { KPICard } from '../ui/KPICard'
+import { safeNumber, formatNumber, formatCurrency, formatMonthLong, formatMonthShort, truncTo } from '../../utils/format'
+import { buildTimeline, buildTimelineSummary } from '../../utils/timeline'
 
 const PLATFORM_META = {
   facebook:  { icon: Facebook,  accent: '#3b82f6', label: 'Facebook' },
@@ -14,7 +16,7 @@ const PLATFORM_META = {
   tiktok:    { icon: Music2,    accent: '#a855f7', label: 'TikTok' },
 }
 
-// ── Mini-tarjeta de plataforma dentro del nodo del mes ──────────────────────
+// ── Mini-tarjeta de plataforma dentro del nodo ──────────────────────────────
 function PlatformChip({ platform, row, onClick }) {
   const meta = PLATFORM_META[platform]
   if (!row || !meta) return null
@@ -61,7 +63,7 @@ function GoogleAdsChip({ rows, onClick }) {
   )
 }
 
-// ── Tarjeta de campaña de periodo específico ────────────────────────────────
+// ── Tarjeta de campaña atemporal ────────────────────────────────────────────
 function CampaignCard({ campaign, accent }) {
   const [open, setOpen] = useState(false)
   const platformIcons = campaign.platforms
@@ -134,9 +136,143 @@ function CampaignCard({ campaign, accent }) {
   )
 }
 
-// ── Nodo de un mes en el timeline ────────────────────────────────────────────
-function MonthNode({ entry, theme, onNavigate, isFirst }) {
+// ─────────────────────────────────────────────────────────────────────────────
+// Resumen histórico — KPIs globales de la cuenta
+// ─────────────────────────────────────────────────────────────────────────────
+function TimelineSummary({ summary, theme }) {
+  const periodLabel = summary.firstMonth && summary.lastMonth
+    ? `${formatMonthShort(summary.firstMonth)} – ${formatMonthShort(summary.lastMonth)}`
+    : null
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="glass-card rounded-2xl p-5"
+    >
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+        <div>
+          <h2 className="text-lg font-bold text-white font-display">Resumen Histórico de la Cuenta</h2>
+          {periodLabel && (
+            <p className="text-xs text-white/45 mt-0.5">{periodLabel}</p>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPICard
+          title="Meses con Actividad"
+          value={summary.totalMonths}
+          icon={Calendar}
+          accentColor={theme.primary}
+          delay={0}
+        />
+        <KPICard
+          title="Campañas Atemporales"
+          value={summary.totalCampaigns}
+          icon={Flag}
+          accentColor="#f59e0b"
+          delay={1}
+        />
+        <KPICard
+          title="Inversión Total"
+          value={summary.totalInvestment}
+          icon={DollarSign}
+          accentColor="#22d3ee"
+          formatter={v => formatCurrency(v)}
+          subtitle={summary.campaignInvestment > 0 ? `${formatCurrency(summary.campaignInvestment)} en atemporales` : undefined}
+          delay={2}
+        />
+        <KPICard
+          title="Crecimiento de Seguidores"
+          value={summary.followerGrowth}
+          icon={TrendingUp}
+          accentColor="#22c55e"
+          formatter={v => (v >= 0 ? '+' : '') + formatNumber(v)}
+          subtitle={summary.followerGrowthPct !== null ? `${truncTo(summary.followerGrowthPct, 1)}% vs inicio` : undefined}
+          delay={3}
+        />
+      </div>
+    </motion.div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mini gráfica de inversión mensual
+// ─────────────────────────────────────────────────────────────────────────────
+function ChartTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="glass-strong rounded-lg px-3 py-2 text-xs border border-white/10">
+      <p className="text-white/60 mb-0.5">{formatMonthShort(label)}</p>
+      <p className="text-white font-bold">{formatCurrency(payload[0].value)}</p>
+    </div>
+  )
+}
+
+function InvestmentTrendChart({ data, theme }) {
+  if (!data || data.length < 2) return null
+
+  const gradientId = 'invest-gradient'
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: 0.2 }}
+      className="glass-card rounded-2xl p-5"
+    >
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div>
+          <h3 className="text-sm font-bold text-white">Inversión Mensual (AON + Google Ads)</h3>
+          <p className="text-[11px] text-white/45 mt-0.5">Tendencia de inversión a lo largo del tiempo</p>
+        </div>
+      </div>
+      <ResponsiveContainer width="100%" height={180}>
+        <AreaChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={theme.primary} stopOpacity={0.4} />
+              <stop offset="100%" stopColor={theme.primary} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <XAxis
+            dataKey="mes"
+            tickFormatter={v => formatMonthShort(v)?.split(' ')[0]}
+            tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }}
+            axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+            tickLine={false}
+          />
+          <YAxis
+            tickFormatter={v => formatNumber(v)}
+            tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            width={45}
+          />
+          <Tooltip content={<ChartTooltip />} />
+          <Area
+            type="monotone"
+            dataKey="inversion"
+            stroke={theme.primary}
+            strokeWidth={2}
+            fill={`url(#${gradientId})`}
+            isAnimationActive
+            animationDuration={800}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </motion.div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Nodo del timeline — un periodo de actividad (mensual o campaña)
+// ─────────────────────────────────────────────────────────────────────────────
+function TimelineNode({ entry, theme, onNavigate, isFirst }) {
   const { mes, facebook, instagram, tiktok, googleAds, campaigns, hasMonthlyReport } = entry
+  const nodeColor = hasMonthlyReport ? theme.primary : (theme.secondary || '#f59e0b')
 
   return (
     <div className="relative pl-10">
@@ -145,8 +281,8 @@ function MonthNode({ entry, theme, onNavigate, isFirst }) {
         <div
           className="w-3.5 h-3.5 rounded-full border-2 flex-shrink-0 z-10"
           style={{
-            background: hasMonthlyReport ? theme.primary : 'transparent',
-            borderColor: theme.primary,
+            background: nodeColor,
+            borderColor: nodeColor,
           }}
         />
         <div className="w-px flex-1 bg-white/12 mt-1" />
@@ -158,10 +294,21 @@ function MonthNode({ entry, theme, onNavigate, isFirst }) {
         transition={{ duration: 0.35 }}
         className={`glass-card rounded-2xl p-4 space-y-3 ${isFirst ? '' : 'mb-5'}`}
       >
+        {/* Header con mes + tipo */}
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4" style={{ color: theme.primary }} />
+          <div className="flex items-center gap-2 flex-wrap">
+            <Calendar className="w-4 h-4" style={{ color: nodeColor }} />
             <h3 className="text-base font-bold text-white font-display capitalize">{formatMonthLong(mes)}</h3>
+            {/* Badge de tipo */}
+            <span
+              className="text-[9px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full flex-shrink-0"
+              style={{
+                background: hasMonthlyReport ? `${theme.primary}25` : `${nodeColor}25`,
+                color: hasMonthlyReport ? theme.primary : nodeColor,
+              }}
+            >
+              {hasMonthlyReport ? 'Mensual / AON' : 'Solo campañas'}
+            </span>
           </div>
           {hasMonthlyReport && (
             <button
@@ -173,6 +320,7 @@ function MonthNode({ entry, theme, onNavigate, isFirst }) {
           )}
         </div>
 
+        {/* Contenido: reporte mensual o solo campañas */}
         {hasMonthlyReport ? (
           <div className="flex flex-wrap gap-2">
             <PlatformChip platform="facebook" row={facebook} onClick={() => onNavigate(mes, 'facebook')} />
@@ -181,13 +329,23 @@ function MonthNode({ entry, theme, onNavigate, isFirst }) {
             <GoogleAdsChip rows={googleAds} onClick={() => onNavigate(mes, 'google-ads')} />
           </div>
         ) : (
-          <p className="text-[11px] text-white/35">Sin reporte mensual para este periodo — solo campañas de periodo específico.</p>
+          // Mes sin AON pero con campañas atemporales — mostrar campañas como contenido principal
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5">
+            <p className="text-[11px] text-white/50 mb-0.5">
+              Sin reporte mensual AON — {campaigns.length} campaña{campaigns.length !== 1 ? 's' : ''} atemporal{campaigns.length !== 1 ? 'es' : ''} activa{campaigns.length !== 1 ? 's' : ''} en este periodo
+            </p>
+          </div>
         )}
 
+        {/* Campañas atemporales (siempre que existan) */}
         {campaigns.length > 0 && (
           <div className="space-y-2 pt-1">
-            <p className="text-[10px] uppercase tracking-widest text-white/40 font-semibold">
-              {campaigns.length === 1 ? 'Campaña activa en este periodo' : `${campaigns.length} campañas activas en este periodo`}
+            <p className="text-[10px] uppercase tracking-widest text-white/40 font-semibold flex items-center gap-1.5">
+              <Zap className="w-3 h-3" style={{ color: theme.secondary || '#f59e0b' }} />
+              {hasMonthlyReport
+                ? `${campaigns.length} campaña${campaigns.length !== 1 ? 's' : ''} atemporal${campaigns.length !== 1 ? 'es' : ''} activa${campaigns.length !== 1 ? 's' : ''}`
+                : 'Detalle de campañas'
+              }
             </p>
             <div className="space-y-2">
               {campaigns.map(c => <CampaignCard key={c.key + mes} campaign={c} accent={theme.secondary || theme.primary} />)}
@@ -200,12 +358,10 @@ function MonthNode({ entry, theme, onNavigate, isFirst }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Timeline principal — reemplaza el selector de "un mes a la vez" como forma
-// de navegar el histórico: aquí SIEMPRE se ven todos los meses y todas las
-// campañas de periodo específico que coincidieron con cada uno.
+// Timeline principal — línea de tiempo continua de actividad de la cuenta
 // ═══════════════════════════════════════════════════════════════════════════════
 export function Timeline({ data, theme, loading, onNavigateMonth }) {
-  const [order, setOrder] = useState('desc') // 'desc' = más reciente primero
+  const [order, setOrder] = useState('desc')
 
   const entries = useMemo(() => {
     const built = buildTimeline({
@@ -219,9 +375,19 @@ export function Timeline({ data, theme, loading, onNavigateMonth }) {
     return order === 'desc' ? built : [...built].reverse()
   }, [data, order])
 
+  const summary = useMemo(() => buildTimelineSummary({
+    facebook: data?.facebook || [],
+    instagram: data?.instagram || [],
+    tiktok: data?.tiktok || [],
+    googleAds: data?.googleAds || [],
+    campanas: data?.campanas || [],
+  }), [data])
+
   if (loading) {
     return (
       <div className="space-y-4">
+        <div className="h-32 rounded-2xl skeleton" />
+        <div className="h-48 rounded-2xl skeleton" />
         {[...Array(4)].map((_, i) => <div key={i} className="h-40 rounded-2xl skeleton" />)}
       </div>
     )
@@ -232,7 +398,7 @@ export function Timeline({ data, theme, loading, onNavigateMonth }) {
       <SectionHeader
         icon={Calendar}
         title="Cronología"
-        subtitle="Reportes mensuales y campañas de periodo específico, en orden cronológico"
+        subtitle="Línea de tiempo continua: reportes mensuales AON y campañas atemporales"
         accentColor={theme.primary}
         actions={
           <button
@@ -248,20 +414,29 @@ export function Timeline({ data, theme, loading, onNavigateMonth }) {
         <EmptyState
           icon={Calendar}
           title="Sin datos todavía"
-          message="En cuanto haya filas con mes (o fecha_inicio/fecha_fin) en el Sheet, aparecerán aquí en orden cronológico."
+          message="En cuanto haya filas con mes (o fecha_inicio/fecha_fin) en el Sheet, aparecerán aquí en orden cronológico — tanto campañas mensuales como atemporales."
         />
       ) : (
-        <div>
-          {entries.map((entry, i) => (
-            <MonthNode
-              key={entry.mes}
-              entry={entry}
-              theme={theme}
-              isFirst={i === entries.length - 1}
-              onNavigate={onNavigateMonth}
-            />
-          ))}
-        </div>
+        <>
+          {/* Resumen histórico */}
+          <TimelineSummary summary={summary} theme={theme} />
+
+          {/* Gráfica de inversión */}
+          <InvestmentTrendChart data={summary.investSeries} theme={theme} />
+
+          {/* Línea de tiempo continua */}
+          <div>
+            {entries.map((entry, i) => (
+              <TimelineNode
+                key={entry.mes}
+                entry={entry}
+                theme={theme}
+                isFirst={i === entries.length - 1}
+                onNavigate={onNavigateMonth}
+              />
+            ))}
+          </div>
+        </>
       )}
     </div>
   )

@@ -124,6 +124,76 @@ export function buildSpecificCampaigns(campanas = []) {
   })
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Resumen histórico de la cuenta — totales y series para mini-chart
+// ─────────────────────────────────────────────────────────────────────────────
+export function buildTimelineSummary(data = {}) {
+  const { facebook = [], instagram = [], tiktok = [], googleAds = [], campanas = [] } = data
+
+  // Collect all months with social/ads data
+  const monthsSet = new Set()
+  for (const arr of [facebook, instagram, tiktok, googleAds]) {
+    for (const r of arr) { if (r.mes) monthsSet.add(r.mes) }
+  }
+
+  // AON (mensual) investment by month
+  const aonInvestByMonth = new Map()
+  for (const c of campanas) {
+    const bucket = c._bucket || tipoCampanaToBucket(c.tipo_campana)
+    if (bucket !== 'mensual' || !c.mes) continue
+    aonInvestByMonth.set(c.mes, (aonInvestByMonth.get(c.mes) || 0) + safeNumber(c.inversion))
+  }
+
+  // Google Ads investment by month
+  const gadsInvestByMonth = new Map()
+  for (const r of googleAds) {
+    if (!r.mes) continue
+    gadsInvestByMonth.set(r.mes, (gadsInvestByMonth.get(r.mes) || 0) + safeNumber(r.inversion))
+  }
+
+  const allMonths = Array.from(monthsSet).sort()
+
+  // Monthly investment series (AON + Google Ads, no atemporal to avoid double counting)
+  const investSeries = allMonths.map(mes => ({
+    mes,
+    inversion: (aonInvestByMonth.get(mes) || 0) + (gadsInvestByMonth.get(mes) || 0),
+  }))
+
+  const totalAonInvest = Array.from(aonInvestByMonth.values()).reduce((s, v) => s + v, 0)
+  const totalGadsInvest = Array.from(gadsInvestByMonth.values()).reduce((s, v) => s + v, 0)
+
+  // Atemporal campaigns
+  const specificCampaigns = buildSpecificCampaigns(campanas)
+  const totalCampaignInvest = specificCampaigns.reduce((s, c) => s + safeNumber(c.inversion), 0)
+
+  // Follower growth (first vs last month)
+  const getFollowers = (mes) => {
+    const fb = facebook.find(r => r.mes === mes)
+    const ig = instagram.find(r => r.mes === mes)
+    const tt = tiktok.find(r => r.mes === mes)
+    return safeNumber(fb?.seguidores) + safeNumber(ig?.seguidores) + safeNumber(tt?.seguidores)
+  }
+  const firstMonth = allMonths[0]
+  const lastMonth = allMonths[allMonths.length - 1]
+  const firstFollowers = firstMonth ? getFollowers(firstMonth) : 0
+  const lastFollowers = lastMonth ? getFollowers(lastMonth) : 0
+
+  return {
+    totalMonths: allMonths.length,
+    totalCampaigns: specificCampaigns.length,
+    totalInvestment: totalAonInvest + totalGadsInvest + totalCampaignInvest,
+    monthlyInvestment: totalAonInvest + totalGadsInvest,
+    campaignInvestment: totalCampaignInvest,
+    firstMonth,
+    lastMonth,
+    firstFollowers,
+    lastFollowers,
+    followerGrowth: lastFollowers - firstFollowers,
+    followerGrowthPct: firstFollowers > 0 ? ((lastFollowers - firstFollowers) / firstFollowers) * 100 : null,
+    investSeries,
+  }
+}
+
 // ── Construye la línea de tiempo completa ───────────────────────────────────
 // data = { facebook, instagram, tiktok, googleAds, sentiment, campanas } ya
 // filtrados por marca (sin filtrar por mes — el timeline necesita TODOS los
