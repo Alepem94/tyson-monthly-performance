@@ -1,0 +1,39 @@
+name: Fix Paid Media visibility
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Remove Paid Media early return
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/components/sections/SocialSection.jsx')
+          text = path.read_text()
+          old = """  // Nota: este early return va DESPUÉS de todos los hooks (useState/useMemo/useEffect)\n  // para no violar las reglas de hooks (mismo número de hooks en cada render).\n  if (platProy.length === 0 && inversionTotal === 0) return null\n"""
+          if old not in text:
+              raise SystemExit('Paid Media guard not found; refusing to modify the file.')
+          path.write_text(text.replace(old, '', 1))
+          PY
+
+      - name: Commit fix and remove temporary workflow
+        run: |
+          rm -f .github/workflows/fix-paid-media-visibility.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/sections/SocialSection.jsx .github/workflows/fix-paid-media-visibility.yml
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: keep paid media tab visible [skip ci]"
+          git push
