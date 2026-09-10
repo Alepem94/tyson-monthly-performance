@@ -653,11 +653,11 @@ export function SocialSection({
 // Wrappers de ruta: pestañas "Paid Media" y "Top Post" (Facebook / Instagram)
 // ═══════════════════════════════════════════════════════════════════════════════
 export function SocialPaidMediaSection({
-  platform, data, campanas = [], allCampanas = [], proyecciones = [],
+  platform, data, campanas = [], allCampanas = [], proyecciones = [], selectedMonth = null,
   observaciones, loading, hallazgos = [],
 }) {
   const cfg = PLATFORM_CONFIG[platform] || PLATFORM_CONFIG.facebook
-  const activeMonth = data?.mes || null
+  const activeMonth = selectedMonth || data?.[0]?.mes || null
 
   if (loading) {
     return (

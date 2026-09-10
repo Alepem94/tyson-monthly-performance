@@ -322,6 +322,7 @@ export function Dashboard() {
                   campanas={filteredData.campanas}
                   allCampanas={data.campanas || []}
                   proyecciones={filteredData.proyecciones || []}
+                  selectedMonth={effectiveMonth}
                   observaciones={filteredData.observaciones?.filter(o => o.seccion === 'facebook')}
                   loading={loading}
                   hallazgos={filteredData.hallazgos}
@@ -343,6 +344,7 @@ export function Dashboard() {
                   campanas={filteredData.campanas}
                   allCampanas={data.campanas || []}
                   proyecciones={filteredData.proyecciones || []}
+                  selectedMonth={effectiveMonth}
                   observaciones={filteredData.observaciones?.filter(o => o.seccion === 'instagram')}
                   loading={loading}
                   hallazgos={filteredData.hallazgos}
@@ -363,25 +365,9 @@ export function Dashboard() {
                   campanas={filteredData.campanas}
                   allCampanas={data.campanas || []}
                   proyecciones={filteredData.proyecciones || []}
+                  selectedMonth={effectiveMonth}
                   observaciones={filteredData.observaciones?.filter(o => o.seccion === 'tiktok')}
                   loading={loading}
-                  hallazgos={filteredData.hallazgos}
-                />
-              } />
-
-              <Route path="tiktok/top-post" element={
-                <TikTokTopPostSection
-                  topPosts={filteredData.topPosts}
-                  loading={loading}
-                />
-              } />
-
-              <Route path="facebook/historico" element={
-                <PlatformHistory
-                  platform="facebook"
-                  historical={historicalData.facebook}
-                  campanas={data.campanas || []}
-                  currentMonth={effectiveMonth}
                   theme={theme}
                 />
               } />

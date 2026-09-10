@@ -114,10 +114,10 @@ export function TikTokSection({
 // Wrappers de ruta: pestañas "Paid Media" y "Top Post" (TikTok)
 // ═══════════════════════════════════════════════════════════════════════════════
 export function TikTokPaidMediaSection({
-  data, campanas = [], allCampanas = [], proyecciones = [],
+  data, campanas = [], allCampanas = [], proyecciones = [], selectedMonth = null,
   observaciones, loading, hallazgos = [],
 }) {
-  const activeMonth = data?.mes || null
+  const activeMonth = selectedMonth || data?.[0]?.mes || null
 
   if (loading) {
     return (
