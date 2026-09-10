@@ -3,11 +3,12 @@ import { motion } from 'framer-motion'
 import {
   LayoutDashboard, Facebook, Instagram, Music2, Megaphone,
   MessageSquare, Sparkles, ChevronLeft, ChevronRight, ArrowLeft,
-  LineChart,
+  LineChart, Calendar,
 } from 'lucide-react'
 import { displayBrandName } from '../../utils/brands'
 
 const ALL_NAV_ITEMS = [
+  { to: 'cronologia',   label: 'Cronología',   icon: Calendar,        feature: null },
   { to: 'overview',     label: 'Resumen',      icon: LayoutDashboard, feature: null },
   { to: 'facebook',     label: 'Facebook',     icon: Facebook,        feature: null },
   { to: 'instagram',    label: 'Instagram',    icon: Instagram,       feature: null },

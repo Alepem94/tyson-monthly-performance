@@ -5,6 +5,7 @@ import { Header } from '../components/layout/Header'
 import { useSheetData } from '../hooks/useSheetData'
 import { useDateFilter } from '../hooks/useDateFilter'
 import { Overview } from '../components/sections/Overview'
+import { Timeline } from '../components/sections/Timeline'
 import { SocialSection, SocialPaidMediaSection, SocialTopPostSection } from '../components/sections/SocialSection'
 import { TikTokSection, TikTokPaidMediaSection, TikTokTopPostSection } from '../components/sections/TikTokSection'
 import { GoogleAdsSection } from '../components/sections/GoogleAdsSection'
@@ -145,6 +146,14 @@ export function Dashboard() {
     setEndDate(e)
   }, [])
 
+  // Desde el timeline: fija el mes elegido y navega a la sección de detalle
+  // correspondiente (Resumen por defecto, o la plataforma que se haya tocado).
+  const handleNavigateFromTimeline = useCallback((mes, section = 'overview') => {
+    setFilterMode('month')
+    setSelectedMonth(mes)
+    navigate(`/dashboard/${marcaId}/${section}`)
+  }, [marcaId, navigate])
+
   const handleFilterModeChange = useCallback((mode) => {
     setFilterMode(mode)
     if (mode === 'month') {
@@ -235,6 +244,15 @@ export function Dashboard() {
 
           <div className="p-4 md:p-6 space-y-6">
             <Routes>
+              <Route path="cronologia" element={
+                <Timeline
+                  data={data}
+                  theme={theme}
+                  loading={loading}
+                  onNavigateMonth={handleNavigateFromTimeline}
+                />
+              } />
+
               <Route path="overview" element={
                 <Overview
                   data={filteredData}
@@ -475,7 +493,7 @@ export function Dashboard() {
                 />
               } />
 
-              <Route path="*" element={<Navigate to="overview" replace />} />
+              <Route path="*" element={<Navigate to="cronologia" replace />} />
             </Routes>
           </div>
         </main>
