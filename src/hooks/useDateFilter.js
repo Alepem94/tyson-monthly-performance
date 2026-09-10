@@ -68,9 +68,23 @@ function pickBestMonthRow(rows, filterFn) {
   }, matches[0])
 }
 
+const monthKey = (value) => {
+  if (!value) return ''
+  const text = String(value).trim()
+  const match = text.match(/(\d{4})[-/]?(\d{1,2})/)
+  return match ? `${match[1]}-${String(match[2]).padStart(2, '0')}` : text.slice(0, 7)
+}
+
+const normalizedValue = (value) => String(value ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/[\s_-]+/g, ' ')
+  .trim()
+
 export function rangeInSameMonth(startDate, endDate) {
   if (!startDate || !endDate) return false
-  return startDate.slice(0, 7) === endDate.slice(0, 7)
+  return monthKey(startDate) === monthKey(endDate)
 }
 
 export function useDateFilter(data, { mode, selectedMonth, startDate, endDate }) {
@@ -81,7 +95,8 @@ export function useDateFilter(data, { mode, selectedMonth, startDate, endDate })
       if (!r.fecha) return false
       return r.fecha >= startDate && r.fecha <= endDate
     }
-    const inMonth = (r) => r.mes === selectedMonth
+    const selectedMonthKey = monthKey(selectedMonth)
+    const inMonth = (r) => monthKey(r.mes) === selectedMonthKey
 
     const getSingleForMonth = (arr) => {
       if (!Array.isArray(arr) || arr.length === 0) return null
@@ -134,8 +149,8 @@ export function useDateFilter(data, { mode, selectedMonth, startDate, endDate })
     const allProy = data.proyecciones || []
     const proyeccionesMensuales = showProyecciones
       ? allProy.filter(r => {
-          const tipo = r.tipo_proyeccion || 'Mensual'
-          return tipo === 'Mensual' && r.mes === proyMonth
+          const tipo = normalizedValue(r.tipo_proyeccion || 'Mensual')
+          return tipo === 'mensual' && monthKey(r.mes) === monthKey(proyMonth)
         })
       : []
     const proyeccionesCampana = allProy.filter(r => (r.tipo_proyeccion || '') === 'Campaña')
