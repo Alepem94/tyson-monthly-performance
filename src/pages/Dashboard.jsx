@@ -155,6 +155,10 @@ export function Dashboard() {
     navigate(`/dashboard/${marcaId}/${section}`)
   }, [marcaId, navigate])
 
+  const handleNavigateCampaign = useCallback(() => {
+    navigate(`/dashboard/${marcaId}/campanas`)
+  }, [marcaId, navigate])
+
   const handleFilterModeChange = useCallback((mode) => {
     setFilterMode(mode)
     if (mode === 'month') {
@@ -251,6 +255,7 @@ export function Dashboard() {
                   theme={theme}
                   loading={loading}
                   onNavigateMonth={handleNavigateFromTimeline}
+                  onNavigateCampaign={handleNavigateCampaign}
                 />
               } />
 
