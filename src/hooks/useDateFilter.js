@@ -22,7 +22,6 @@ function aggregateRows(rows, extraFields = []) {
     if (hasValue) result[field] = total
   }
 
-  // LAST fields: take the last row (by fecha) that has a valid positive value
   for (const field of LAST_FIELDS) {
     for (let i = sorted.length - 1; i >= 0; i--) {
       const v = safeNumber(sorted[i][field], NaN)
@@ -49,20 +48,16 @@ function aggregateArrayRows(rows, groupByFields = []) {
   return Object.values(groups).map(group => aggregateRows(group))
 }
 
-// When monthly data has multiple rows for the same month, pick the one with
-// the latest fecha (or highest seguidores if no fecha)
 function pickBestMonthRow(rows, filterFn) {
   const matches = rows.filter(filterFn)
   if (matches.length === 0) return null
   if (matches.length === 1) return matches[0]
 
-  // If rows have fecha, take the last one chronologically
   const withFecha = matches.filter(r => r.fecha)
   if (withFecha.length > 0) {
     return withFecha.reduce((best, r) => r.fecha > best.fecha ? r : best, withFecha[0])
   }
 
-  // No fecha → take the row with highest seguidores
   return matches.reduce((best, r) => {
     return safeNumber(r.seguidores, 0) > safeNumber(best.seguidores, 0) ? r : best
   }, matches[0])
@@ -91,7 +86,6 @@ export function useDateFilter(data, { mode, selectedMonth, startDate, endDate })
         if (hasFecha) return aggregateRows(arr.filter(inMonth))
         return pickBestMonthRow(arr, inMonth)
       }
-      // Range mode
       if (hasFecha) return aggregateRows(arr.filter(inRange))
       return null
     }
@@ -130,15 +124,10 @@ export function useDateFilter(data, { mode, selectedMonth, startDate, endDate })
     const proyMonth = mode === 'month' ? selectedMonth
       : (showProyecciones ? startDate?.slice(0, 7) : null)
 
-    // ── Proyecciones: separar Mensual vs Campaña para evitar doble conteo ──
-    const allProy = data.proyecciones || []
-    const proyeccionesMensuales = showProyecciones
-      ? allProy.filter(r => {
-          const tipo = r.tipo_proyeccion || 'Mensual'
-          return tipo === 'Mensual' && r.mes === proyMonth
-        })
-      : []
-    const proyeccionesCampana = allProy.filter(r => (r.tipo_proyeccion || '') === 'Campaña')
+    // Proyecciones: se conserva UNA sola colección, como en la arquitectura
+    // original. Las filas Mensual tienen mes; las filas Campaña pueden no tenerlo.
+    // Cada componente decide cómo usar cada tipo y no pierde las filas de campaña.
+    const allProy = Array.isArray(data.proyecciones) ? data.proyecciones : []
 
     return {
       empresa: data.empresa,
@@ -156,9 +145,19 @@ export function useDateFilter(data, { mode, selectedMonth, startDate, endDate })
       competencia:  getMonthOnly(data.competencia),
       hallazgos:    getMonthOnly(data.hallazgos),
       observaciones: getMonthOnly(data.observaciones),
-      proyecciones: proyeccionesMensuales,
-      proyeccionesCampana: proyeccionesCampana,
-      proyeccionesTodas: showProyecciones ? [...proyeccionesMensuales, ...proyeccionesCampana] : [...proyeccionesCampana],
+      // IMPORTANTE: no separar proyecciones por fecha/tipo aquí.
+      // Paid Media recibe la tabla completa y cruza Mensual/Campaña internamente.
+      proyecciones: allProy,
+      // Alias de compatibilidad: mantienen la información disponible sin
+      // convertirlos en la fuente principal de Paid Media.
+      proyeccionesMensuales: showProyecciones
+        ? allProy.filter(r => {
+            const tipo = String(r.tipo_proyeccion || 'Mensual').trim().toLowerCase()
+            return tipo === 'mensual' && r.mes === proyMonth
+          })
+        : [],
+      proyeccionesCampana: allProy.filter(r => String(r.tipo_proyeccion || '').trim().toLowerCase() === 'campaña'),
+      proyeccionesTodas: allProy,
       _mode: mode,
       _showMonthOnly: mode === 'month',
       _showProyecciones: showProyecciones,
@@ -166,10 +165,6 @@ export function useDateFilter(data, { mode, selectedMonth, startDate, endDate })
     }
   }, [data, mode, selectedMonth, startDate, endDate])
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // historicalData: one aggregated row per month, using last fecha per month
-  // for LAST_FIELDS (seguidores). Works for both daily and monthly data.
-  // ─────────────────────────────────────────────────────────────────────────
   const historicalData = useMemo(() => {
     const aggregateByMonth = (arr) => {
       if (!Array.isArray(arr)) return []
@@ -182,11 +177,7 @@ export function useDateFilter(data, { mode, selectedMonth, startDate, endDate })
       }
       return Object.entries(byMonth).map(([mes, rows]) => {
         const hasFecha = rows.some(r => r.fecha)
-        if (hasFecha) {
-          // Daily data: aggregate the month (last fecha = correct seguidores)
-          return aggregateRows(rows)
-        }
-        // Monthly data: pick best row (latest fecha or highest seguidores)
+        if (hasFecha) return aggregateRows(rows)
         return pickBestMonthRow(rows, () => true)
       }).filter(Boolean)
     }
