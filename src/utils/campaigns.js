@@ -1,22 +1,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Campaign classification v3
 // ─────────────────────────────────────────────────────────────────────────────
-// The Google Sheet now has explicit columns (auto-filled by Apps Script):
-//   • marca              (explicit)
-//   • mes                (explicit)
-//   • plataforma         (explicit, auto-detected from nombre_campana)
-//   • objetivo_detectado (explicit, auto-detected)
-//   • tipo_campana       (explicit: "AON" | "Mundial" | "Pal Norte" | custom)
-//
-// This module reads those columns directly and falls back to name-based
-// detection only when the explicit column is missing (older sheets).
-// ─────────────────────────────────────────────────────────────────────────────
 
 const stripAccents = (s) =>
   String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
 
-// Canonical platform keys used by dashboard routes. Source sheets may use
-// FB/IG/TT, full names, or labels such as "Facebook Ads".
 export function normalizeCampaignPlatform(value) {
   const s = stripAccents(value)
   if (!s) return null
@@ -27,13 +15,6 @@ export function normalizeCampaignPlatform(value) {
   return s
 }
 
-// ── Bucket detection ────────────────────────────────────────────────────────
-// A "bucket" is the grouping used by the Mensual/Mundial/Pal Norte toggle.
-// Maps tipo_campana → bucket key:
-//   "AON"        → 'mensual' (for backwards compat with the toggle)
-//   "Mundial"    → 'mundial'
-//   "Pal Norte"  → 'pal_norte'
-//   others       → slugified version of tipo_campana ('buen_fin', etc.)
 export function tipoCampanaToBucket(tipoCampana) {
   if (!tipoCampana) return 'mensual'
   const s = stripAccents(tipoCampana)
@@ -73,8 +54,7 @@ export function detectPlatformFromName(name, fallbackPlatform) {
   if (/\big\b|instagram/.test(s)) return 'instagram'
   if (/\btiktok\b|\btt\b|tik\s*tok/.test(s)) return 'tiktok'
   if (/\bgoogle\b|google\s*ads|video\s*ads|display\s*ads/.test(s)) return 'google'
-  if (fallbackPlatform) return normalizeCampaignPlatform(fallbackPlatform)
-  return null
+  return normalizeCampaignPlatform(fallbackPlatform)
 }
 
 export function normalizeMetricKey(value) {
@@ -82,10 +62,15 @@ export function normalizeMetricKey(value) {
 }
 
 export function getCampaignPlatform(row) {
+  // Explicit platform/channel is authoritative. Only inspect the campaign
+  // name when the source does not provide a usable platform value.
+  const explicit = normalizeCampaignPlatform(
+    row?.plataforma ?? row?.platform ?? row?.channel ?? row?.canal ?? row?.medio ?? row?.media ?? row?.red
+  )
+  if (explicit) return explicit
+
   const fullName = row?.nombre_campana || row?._fullName || ''
-  const fromName = detectPlatformFromName(fullName)
-  if (fromName) return fromName
-  return normalizeCampaignPlatform(row?.plataforma)
+  return detectPlatformFromName(fullName)
 }
 
 export function getGoogleObjective(tipoValue) {
@@ -103,9 +88,7 @@ export function extractObjective(name, platform) {
   if (/thruplay/.test(s)) return 'Thruplays'
   if (/interacc?ion/.test(s)) return 'Interacción'
   if (/alcance|reach/.test(s)) return 'Alcance'
-  if (platform === 'tiktok') {
-    if (/\bview|visual|play|reproduc/.test(s)) return 'Views'
-  }
+  if (platform === 'tiktok' && /\bview|visual|play|reproduc/.test(s)) return 'Views'
   if (platform === 'google') {
     if (/\bvideo\b|youtube/.test(s)) return 'Video'
     if (/\bdisplay\b|dsp|banner/.test(s)) return 'Display'
@@ -119,26 +102,13 @@ export function enrichCampaign(row) {
   const tipoCampana = row.tipo_campana || detectTipoCampanaFromName(fullName)
   const bucket = tipoCampanaToBucket(tipoCampana)
   const platform = getCampaignPlatform({ ...row, _fullName: fullName })
-  const objective = row.objetivo_detectado
-    || row.objetivo
-    || extractObjective(fullName, platform)
-    || 'Sin objetivo'
-  return {
-    ...row,
-    _bucket: bucket,
-    _platform: platform,
-    _objective: objective,
-    _tipoCampana: tipoCampana,
-    _fullName: fullName,
-  }
+  const objective = row.objetivo_detectado || row.objetivo || extractObjective(fullName, platform) || 'Sin objetivo'
+  return { ...row, _bucket: bucket, _platform: platform, _objective: objective, _tipoCampana: tipoCampana, _fullName: fullName }
 }
 
 export function filterCampaignsByBucket(campaigns, bucket) {
   if (!Array.isArray(campaigns)) return []
-  return campaigns.filter(c => {
-    const b = c._bucket || tipoCampanaToBucket(c.tipo_campana)
-    return b === bucket
-  })
+  return campaigns.filter(c => (c._bucket || tipoCampanaToBucket(c.tipo_campana)) === bucket)
 }
 
 export function buildCampaignPerformance(campaigns = [], platform, bucket = null) {
@@ -149,17 +119,7 @@ export function buildCampaignPerformance(campaigns = [], platform, bucket = null
     const objective = row._objective || row.objetivo_detectado || row.objetivo || ''
     const key = normalizeMetricKey(objective)
     if (!key) return acc
-    if (!acc[key]) {
-      acc[key] = {
-        key,
-        objetivo: objective,
-        metrica: objective,
-        resultado: 0,
-        inversion: 0,
-        impresiones: 0,
-        hasImpresiones: false,
-      }
-    }
+    if (!acc[key]) acc[key] = { key, objetivo: objective, metrica: objective, resultado: 0, inversion: 0, impresiones: 0, hasImpresiones: false }
     acc[key].resultado += Number.parseFloat(row.resultado) || 0
     acc[key].inversion += Number.parseFloat(row.inversion) || 0
     if (row.impresiones !== undefined && row.impresiones !== null && String(row.impresiones).trim() !== '') {
@@ -175,11 +135,7 @@ export function aggregateCampaignMetrics(campaigns) {
     const n = parseFloat(c[key])
     return acc + (isNaN(n) ? 0 : n)
   }, 0)
-  return {
-    inversion: sum('inversion'),
-    resultado: sum('resultado'),
-    meta: sum('meta'),
-  }
+  return { inversion: sum('inversion'), resultado: sum('resultado'), meta: sum('meta') }
 }
 
 export function detectAvailableBuckets(campaigns) {
@@ -188,9 +144,7 @@ export function detectAvailableBuckets(campaigns) {
   for (const c of (campaigns || [])) {
     const tipo = c.tipo_campana || c._tipoCampana || detectTipoCampanaFromName(c.nombre_campana || c.objetivo)
     const bucket = tipoCampanaToBucket(tipo)
-    if (!seen.has(bucket)) {
-      seen.set(bucket, bucketToLabel(bucket, tipo))
-    }
+    if (!seen.has(bucket)) seen.set(bucket, bucketToLabel(bucket, tipo))
   }
   return Array.from(seen.entries()).map(([key, label]) => ({ key, label }))
 }
