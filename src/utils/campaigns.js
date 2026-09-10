@@ -72,7 +72,7 @@ export function detectPlatformFromName(name, fallbackPlatform) {
     if (fb === 'facebook') return 'facebook'
     if (fb === 'instagram') return 'instagram'
     if (fb === 'tiktok') return 'tiktok'
-    if (fb === 'google') return 'google'
+    if (fb === 'google' || fb === 'google ads' || fb === 'googleads') return 'google'
   }
   return fallbackPlatform || null
 }
@@ -85,7 +85,10 @@ export function getCampaignPlatform(row) {
   const fullName = row?.nombre_campana || row?._fullName || ''
   const fromName = detectPlatformFromName(fullName)
   if (fromName) return fromName
-  return row?.plataforma ? stripAccents(row.plataforma) : null
+  if (!row?.plataforma) return null
+  const platform = stripAccents(row.plataforma)
+  if (platform === 'google ads' || platform === 'googleads') return 'google'
+  return platform
 }
 
 // ── Google Ads objective from tipo_objetivo / tipo_red column ──────────────
