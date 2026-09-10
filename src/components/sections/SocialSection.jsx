@@ -229,6 +229,10 @@ function ObjectiveResultCard({ card, accent, delay = 0 }) {
 }
 
 export function PaidMediaSection({ platform, month, campanas, allCampanas = [], proyecciones, accent, hallazgos = [], observaciones = [] }) {
+  // Defensive normalization: the section must render even if a Sheet returns an unexpected shape.
+  const safeCampanas = Array.isArray(campanas) ? campanas : []
+  const safeAllCampanas = Array.isArray(allCampanas) ? allCampanas : []
+  const safeProyecciones = Array.isArray(proyecciones) ? proyecciones : []
   const [bucket, setBucket] = useState('mensual')
   const [breakdownOpen, setBreakdownOpen] = useState(false)
   const paidHallazgos = useMemo(() => mergeLegacyObservations(
@@ -245,30 +249,30 @@ export function PaidMediaSection({ platform, month, campanas, allCampanas = [], 
 
   // Proyecciones de esta plataforma y mes (marca ya filtrada por el hook)
   const platProy = useMemo(
-    () => (proyecciones || []).filter(p => normPlat(p.plataforma) === platform && p.mes === month),
-    [proyecciones, platform, month]
+    () => safeProyecciones.filter(p => normPlat(p.plataforma) === platform && p.mes === month),
+    [safeProyecciones, platform, month]
   )
 
   // Previous month proyecciones for variation
   const pm = prevMonth(month)
   const prevPlatProy = useMemo(
-    () => (proyecciones || []).filter(p => normPlat(p.plataforma) === platform && p.mes === pm),
-    [proyecciones, platform, pm]
+    () => safeProyecciones.filter(p => normPlat(p.plataforma) === platform && p.mes === pm),
+    [safeProyecciones, platform, pm]
   )
   const py = month ? `${Number(String(month).slice(0, 4)) - 1}-${String(month).slice(5, 7)}` : null
 
-  const inversionTotal = useMemo(() => campanaInversion(campanas, platform, null), [campanas, platform])
+  const inversionTotal = useMemo(() => campanaInversion(safeCampanas, platform, null), [safeCampanas, platform])
   const platformPerformance = useMemo(
-    () => buildCampaignPerformance(campanas, platform, null),
-    [campanas, platform]
+    () => buildCampaignPerformance(safeCampanas, platform, null),
+    [safeCampanas, platform]
   )
   const prevPlatformPerformance = useMemo(
-    () => buildCampaignPerformance((allCampanas || []).filter(r => r.mes === pm), platform, null),
-    [allCampanas, platform, pm]
+    () => buildCampaignPerformance(safeAllCampanas.filter(r => r.mes === pm), platform, null),
+    [safeAllCampanas, platform, pm]
   )
   const yearPlatformPerformance = useMemo(
-    () => buildCampaignPerformance((allCampanas || []).filter(r => r.mes === py), platform, null),
-    [allCampanas, platform, py]
+    () => buildCampaignPerformance(safeAllCampanas.filter(r => r.mes === py), platform, null),
+    [safeAllCampanas, platform, py]
   )
 
   const groups = useMemo(() => getGroups(platProy), [platProy])
@@ -281,8 +285,8 @@ export function PaidMediaSection({ platform, month, campanas, allCampanas = [], 
   }, [groups, bucket])
 
   const projectionSummary = useMemo(
-    () => buildPlatformProjectionSummary(proyecciones, platform, month),
-    [proyecciones, platform, month]
+    () => buildPlatformProjectionSummary(safeProyecciones, platform, month),
+    [safeProyecciones, platform, month]
   )
 
   const objectiveCards = useMemo(() => {
@@ -326,8 +330,8 @@ export function PaidMediaSection({ platform, month, campanas, allCampanas = [], 
   }, [platformPerformance, prevPlatformPerformance, yearPlatformPerformance, projectionSummary])
 
   const groupPerformance = useMemo(
-    () => buildCampaignPerformance(campanas, platform, bucket),
-    [campanas, platform, bucket]
+    () => buildCampaignPerformance(safeCampanas, platform, bucket),
+    [safeCampanas, platform, bucket]
   )
 
   // Filas del grupo seleccionado
@@ -348,14 +352,14 @@ export function PaidMediaSection({ platform, month, campanas, allCampanas = [], 
 
   // Mapa objetivo → inversión para el grupo actual
   const objInvMap = useMemo(
-    () => buildObjectiveInversionMap(campanas, platform, bucket),
-    [campanas, platform, bucket]
+    () => buildObjectiveInversionMap(safeCampanas, platform, bucket),
+    [safeCampanas, platform, bucket]
   )
 
-  const groupInversion = useMemo(() => campanaInversion(campanas, platform, bucket), [campanas, platform, bucket])
+  const groupInversion = useMemo(() => campanaInversion(safeCampanas, platform, bucket), [safeCampanas, platform, bucket])
   const groupLabel     = groups.find(g => g.key === bucket)?.label || bucket
-  const prevInversion = useMemo(() => campanaInversion((allCampanas || []).filter(r => r.mes === pm), platform, null), [allCampanas, platform, pm])
-  const yearInversion = useMemo(() => campanaInversion((allCampanas || []).filter(r => r.mes === py), platform, null), [allCampanas, platform, py])
+  const prevInversion = useMemo(() => campanaInversion(safeAllCampanas.filter(r => r.mes === pm), platform, null), [safeAllCampanas, platform, pm])
+  const yearInversion = useMemo(() => campanaInversion(safeAllCampanas.filter(r => r.mes === py), platform, null), [safeAllCampanas, platform, py])
 
   // Subtítulo del header
   const subtitle = [
