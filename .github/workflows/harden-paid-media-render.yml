@@ -1,0 +1,51 @@
+name: Harden Paid Media render
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Normalize Paid Media inputs
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/components/sections/SocialSection.jsx')
+          text = p.read_text()
+          needle = "export function PaidMediaSection({ platform, month, campanas, allCampanas = [], proyecciones, accent, hallazgos = [], observaciones = [] }) {\n"
+          insert = needle + "  // Defensive normalization: the section must render even if a Sheet returns an unexpected shape.\n  const safeCampanas = Array.isArray(campanas) ? campanas : []\n  const safeAllCampanas = Array.isArray(allCampanas) ? allCampanas : []\n  const safeProyecciones = Array.isArray(proyecciones) ? proyecciones : []\n"
+          if needle not in text:
+              raise SystemExit('PaidMediaSection signature not found')
+          if 'const safeCampanas = Array.isArray(campanas)' not in text:
+              text = text.replace(needle, insert, 1)
+          start = text.index('export function PaidMediaSection(')
+          end = text.index('// ═══════════════════════════════════════════════════════════════════════════════\n// SocialSection principal', start)
+          block = text[start:end]
+          block = block.replace('campanaInversion(campanas,', 'campanaInversion(safeCampanas,')
+          block = block.replace('buildCampaignPerformance(campanas,', 'buildCampaignPerformance(safeCampanas,')
+          block = block.replace('buildObjectiveInversionMap(campanas,', 'buildObjectiveInversionMap(safeCampanas,')
+          block = block.replace('(allCampanas || []).filter(', 'safeAllCampanas.filter(')
+          block = block.replace('(proyecciones || []).filter(', 'safeProyecciones.filter(')
+          block = block.replace('buildPlatformProjectionSummary(proyecciones,', 'buildPlatformProjectionSummary(safeProyecciones,')
+          block = block.replace('[campanas, platform', '[safeCampanas, platform')
+          block = block.replace('[allCampanas, platform', '[safeAllCampanas, platform')
+          block = block.replace('[proyecciones, platform', '[safeProyecciones, platform')
+          text = text[:start] + block + text[end:]
+          p.write_text(text)
+          PY
+      - name: Commit and remove workflow
+        run: |
+          rm -f .github/workflows/harden-paid-media-render.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/sections/SocialSection.jsx .github/workflows/harden-paid-media-render.yml
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: harden paid media render inputs [skip ci]"
+          git push
