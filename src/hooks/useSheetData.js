@@ -10,21 +10,79 @@ function getSheetURL(sheetName) {
   return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`
 }
 
-async function fetchSheet(sheetName) {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+// Google's gviz endpoint soft rate-limits concurrent requests against the
+// same spreadsheet. Firing all sheets in parallel (the old behavior) made
+// later requests in the batch fail silently and unpredictably. This retries
+// each sheet a few times with backoff before giving up.
+async function fetchSheetOnce(sheetName) {
+  const response = await fetch(getSheetURL(sheetName))
+  const csvText = await response.text()
+  if (!response.ok || csvText.includes('<!DOCTYPE')) {
+    throw new Error(
+      `No se pudo leer la pestaña "${sheetName}" (status ${response.status}). ` +
+      `Verifica que el Google Sheet esté compartido como "Cualquier persona con el enlace" y que el nombre de la pestaña sea exacto.`
+    )
+  }
+  const { data } = Papa.parse(csvText, { header: true, skipEmptyLines: true })
+  return data
+}
+
+async function fetchSheet(sheetName, { retries = 3, baseDelayMs = 400 } = {}) {
   if (!SHEET_ID) {
     throw new Error(
       'Falta la variable de entorno VITE_SHEET_ID. Configúrala en Vercel → Settings → Environment Variables y vuelve a desplegar.'
     )
   }
-  const response = await fetch(getSheetURL(sheetName))
-  const csvText = await response.text()
-  if (!response.ok || csvText.includes('<!DOCTYPE')) {
-    throw new Error(
-      `No se pudo leer la pestaña "${sheetName}". Verifica que el Google Sheet esté "Publicado en la web" como CSV y que VITE_SHEET_ID sea correcto.`
-    )
+  let lastErr
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fetchSheetOnce(sheetName)
+    } catch (err) {
+      lastErr = err
+      if (attempt < retries) {
+        // Exponential backoff with jitter so retries don't re-collide.
+        const delay = baseDelayMs * 2 ** attempt + Math.random() * 200
+        await sleep(delay)
+      }
+    }
   }
-  const { data } = Papa.parse(csvText, { header: true, skipEmptyLines: true })
-  return data
+  throw lastErr
+}
+
+// Fetches sheets in small sequential batches instead of all-at-once, to stay
+// under Google's per-document concurrency limits. Each entry is
+// [key, sheetName, fallbackSheetName?]. Returns { results, failedSheets }.
+async function fetchSheetsInBatches(specs, batchSize = 4) {
+  const results = {}
+  const failedSheets = []
+
+  for (let i = 0; i < specs.length; i += batchSize) {
+    const batch = specs.slice(i, i + batchSize)
+    await Promise.all(batch.map(async ([key, sheetName, fallbackName, optional]) => {
+      try {
+        results[key] = await fetchSheet(sheetName)
+      } catch (primaryErr) {
+        if (fallbackName) {
+          try {
+            results[key] = await fetchSheet(fallbackName)
+            return
+          } catch (fallbackErr) {
+            if (!optional) failedSheets.push({ sheet: sheetName, error: fallbackErr.message })
+            results[key] = []
+            return
+          }
+        }
+        if (!optional) failedSheets.push({ sheet: sheetName, error: primaryErr.message })
+        results[key] = []
+      }
+    }))
+    // Small pause between batches so we don't immediately hammer the next group.
+    if (i + batchSize < specs.length) await sleep(150)
+  }
+
+  return { results, failedSheets }
 }
 
 function smartNormalize(rawRows) {
@@ -275,6 +333,7 @@ export function useSheetData(marcaId) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [partialErrors, setPartialErrors] = useState([]) // sheets that failed after retries
 
   const features = BRAND_FEATURES[marcaId] || DEFAULT_FEATURES
 
@@ -283,32 +342,41 @@ export function useSheetData(marcaId) {
     try {
       setIsRefreshing(true)
 
-      const [
-        configData, marcasData,
-        fbData, igData, ttData,
-        gadsData, gadsCiudadesData, gadsKeywordsData,
-        campanasData, postsData,
-        sentimentData, capturasData,
-        competenciaData, hallazgosData, observacionesData,
-        proyeccionesData,
-      ] = await Promise.all([
-        fetchSheet('_CONFIG'),
-        fetchSheet('_MARCAS'),
-        fetchSheet('Facebook'),
-        fetchSheet('Instagram'),
-        fetchSheet('TikTok'),
-        fetchSheet('GoogleAds').catch(() => []),
-        fetchSheet('GoogleAds_Ciudades').catch(() => []),
-        fetchSheet('GoogleAds_Keywords').catch(() => []),
-        fetchSheet('Campañas').catch(() => fetchSheet('Campanas').catch(() => [])),
-        fetchSheet('TopPosts'),
-        fetchSheet('Sentiment'),
-        fetchSheet('Sentiment_Capturas').catch(() => []),
-        fetchSheet('Competencia').catch(() => []),
-        fetchSheet('Hallazgos').catch(() => []),
-        fetchSheet('Observaciones').catch(() => []),
-        fetchSheet('Proyecciones').catch(() => []),
-      ])
+      // Fetched in small sequential batches (not all 16 at once) to avoid
+      // Google's gviz per-document rate limit silently killing the later
+      // requests in the list (this is why Campañas/Proyecciones, near the
+      // end of the old Promise.all, used to fail more than Facebook/IG/TT).
+      const { results, failedSheets } = await fetchSheetsInBatches([
+        ['config', '_CONFIG'],
+        ['marcas', '_MARCAS'],
+        ['facebook', 'Facebook'],
+        ['instagram', 'Instagram'],
+        ['tiktok', 'TikTok'],
+        ['gads', 'GoogleAds', null, true],
+        ['gadsCiudades', 'GoogleAds_Ciudades', null, true],
+        ['gadsKeywords', 'GoogleAds_Keywords', null, true],
+        ['campanas', 'Campañas', 'Campanas'],
+        ['posts', 'TopPosts'],
+        ['sentiment', 'Sentiment'],
+        ['capturas', 'Sentiment_Capturas', null, true],
+        ['competencia', 'Competencia', null, true],
+        ['hallazgos', 'Hallazgos', null, true],
+        ['observaciones', 'Observaciones', null, true],
+        ['proyecciones', 'Proyecciones'],
+      ], 4)
+
+      setPartialErrors(failedSheets)
+      if (failedSheets.length > 0) {
+        console.warn('Sheets que no cargaron tras reintentar:', failedSheets)
+      }
+
+      const configData = results.config, marcasData = results.marcas
+      const fbData = results.facebook, igData = results.instagram, ttData = results.tiktok
+      const gadsData = results.gads, gadsCiudadesData = results.gadsCiudades, gadsKeywordsData = results.gadsKeywords
+      const campanasData = results.campanas, postsData = results.posts
+      const sentimentData = results.sentiment, capturasData = results.capturas
+      const competenciaData = results.competencia, hallazgosData = results.hallazgos, observacionesData = results.observaciones
+      const proyeccionesData = results.proyecciones
 
       const empresaRaw = {}
       configData.forEach(row => { if (row.campo && row.valor) empresaRaw[row.campo] = row.valor })
@@ -395,7 +463,7 @@ export function useSheetData(marcaId) {
   return {
     data, brandConfig, allBrands, availableMonths, dateRange, isDailyData,
     loading, error, refresh: loadData, isRefreshing,
-    features,
+    features, partialErrors,
   }
 }
 
